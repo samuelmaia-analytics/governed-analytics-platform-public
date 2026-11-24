@@ -81,10 +81,10 @@ jobs:
           "from src.publication_gate import evaluate_publication_readiness; r = evaluate_publication_readiness(data_quality_score=95, privacy_risk_score=20, critical_rule_failures=0, freshness_status='fresh', schema_contract_status='passed', has_sensitive_data_without_protection=False); assert r.decision in {'Approved','Needs Review','Blocked'}"
 
       - name: Run tests with coverage (global)
-        run: uv run pytest --cov=src --cov=app --cov-report=xml --cov-fail-under=80
+        run: uv run python -m pytest --cov=src --cov=app --cov-report=xml --cov-fail-under=80
 
       - name: Generate coverage report for src flag
-        run: uv run pytest --cov=src --cov-report=xml:coverage-src.xml --cov-report=
+        run: uv run python -m pytest --cov=src --cov-report=xml:coverage-src.xml --cov-report=
 
       - name: Generate coverage report for app flag
-        run: uv run pytest --cov=app --cov-report=xml:coverage-app.xml --cov-report=
+        run: uv run python -m pytest --cov=app --cov-report=xml:coverage-app.xml --cov-report=
