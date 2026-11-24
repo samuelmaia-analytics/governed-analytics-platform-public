@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -140,11 +141,14 @@ def test_real_app_entrypoint_uses_only_proposed_fixture(tmp_path, synthetic_fram
     synthetic_frame.to_parquet(fixture, index=False)
     original_read = pd.read_parquet
 
-    def only_synthetic(path, *args, **kwargs):
-        assert Path(path).resolve() == fixture.resolve(), (
-            "Attempted to read another dataset"
-        )
-        result = original_read(path, *args, **kwargs)
+    def only_synthetic(source, *args, **kwargs):
+        if isinstance(source, BytesIO):
+            content = source.getvalue()
+            assert content == fixture.read_bytes(), "Attempted to read another dataset"
+            result = original_read(BytesIO(content), *args, **kwargs)
+        else:
+            assert Path(source).resolve() == fixture.resolve(), "Attempted to read another dataset"
+            result = original_read(source, *args, **kwargs)
         result.attrs["quality_dataset"] = "fact_orders_dashboard"
         return result
 
