@@ -7,6 +7,8 @@ import plotly.express as px
 import streamlit as st
 
 from app.i18n import LOCALE_EN_US, Locale
+from src.public_mode import is_public_visitor_mode
+from src.semantic_layer import build_category_slice, build_cohort_slice
 
 CATEGORY_SLICE_PATH = Path("data/published/semantic/category_slice.csv")
 COHORT_SLICE_PATH = Path("data/published/semantic/cohort_slice.csv")
@@ -331,8 +333,8 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
     )
     _render_executive_kpis(df)
 
-    category_slice = _load_semantic_slice(CATEGORY_SLICE_PATH)
-    cohort_slice = _load_semantic_slice(COHORT_SLICE_PATH)
+    category_slice = build_category_slice(df) if is_public_visitor_mode() and not df.empty else _load_semantic_slice(CATEGORY_SLICE_PATH)
+    cohort_slice = build_cohort_slice(df) if is_public_visitor_mode() and not df.empty else _load_semantic_slice(COHORT_SLICE_PATH)
 
     tab_evolution, tab_pareto, tab_cohort, tab_sellers = st.tabs(
         [

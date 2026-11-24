@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import streamlit as st
+
+from src.public_mode import is_public_visitor_mode
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -55,7 +56,7 @@ EXPECTED_ARTIFACTS = {
 
 
 def read_csv_safe(path: Path) -> pd.DataFrame:
-    if os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true":
+    if is_public_visitor_mode():
         return pd.DataFrame()
     if not path.exists():
         return pd.DataFrame()
@@ -67,7 +68,7 @@ def read_csv_safe(path: Path) -> pd.DataFrame:
 
 
 def read_json_safe(path: Path) -> dict[str, Any]:
-    if os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true":
+    if is_public_visitor_mode():
         return {}
     if not path.exists():
         return {}
@@ -79,7 +80,7 @@ def read_json_safe(path: Path) -> dict[str, Any]:
 
 
 def read_text_safe(path: Path) -> str:
-    if os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true":
+    if is_public_visitor_mode():
         return ""
     if not path.exists():
         return ""

@@ -7,6 +7,8 @@ import plotly.express as px
 import streamlit as st
 
 from app.i18n import Locale
+from src.public_mode import is_public_visitor_mode
+from src.semantic_layer import build_seller_slice
 
 SELLER_SLICE_PATH = Path("data/published/semantic/seller_slice.csv")
 
@@ -117,7 +119,7 @@ def _build_executive_ranking(ranking: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def render_seller_performance(locale: Locale) -> None:
+def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) -> None:
     del locale
     st.title("Desempenho de Sellers")
     st.markdown(
@@ -135,7 +137,7 @@ def render_seller_performance(locale: Locale) -> None:
         "logístico e contribuição estimada."
     )
 
-    seller_df = _load_seller_slice()
+    seller_df = build_seller_slice(df) if is_public_visitor_mode() and df is not None and not df.empty else _load_seller_slice()
     if seller_df.empty:
         st.info("Dados de sellers não disponíveis neste ambiente.")
         st.caption(

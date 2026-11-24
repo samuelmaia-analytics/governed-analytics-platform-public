@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +14,7 @@ if __package__ is None or __package__ == "":
 
 from src.config import DOCS_DIR, PUBLISHED_DASHBOARD_DIR, PUBLISHED_SEMANTIC_DIR
 from src.ingest import configure_logging
+from src.public_mode import is_public_visitor_mode
 from src.utils import ensure_directory
 
 LOGGER = logging.getLogger(__name__)
@@ -34,12 +37,31 @@ class SemanticArtifacts:
 
 
 def load_published_table() -> pd.DataFrame:
-    if not PUBLISHED_SOURCE_PATH.exists():
-        raise FileNotFoundError(
-            f"Camada publicada nao encontrada para expansao semantica: {PUBLISHED_SOURCE_PATH}"
-        )
-    return pd.read_parquet(PUBLISHED_SOURCE_PATH)
+    if is_public_visitor_mode():
+        # Public visitor profile never reads persisted artifacts directly.
+        # The semantic layer must always be derived from an explicitly
+        # authorized dataset (path + purpose + sha256 + revocation).
+        from src.data_loader import DEFAULT_PUBLIC_DEMO_DATASET, load_dataset
 
+        return load_dataset(DEFAULT_PUBLIC_DEMO_DATASET)
+
+    if PUBLISHED_SOURCE_PATH.exists():
+        return pd.read_parquet(PUBLISHED_SOURCE_PATH)
+
+    configured_source = os.getenv("GAP_SEMANTIC_LAYER_SOURCE_PATH", "").strip()
+    if configured_source:
+        source_path = Path(configured_source)
+        if not source_path.exists() or source_path.is_symlink():
+            raise FileNotFoundError(
+                "Semantic layer source not found (or symlinked): "
+                f"{source_path}"
+            )
+        return pd.read_parquet(source_path)
+
+
+    raise FileNotFoundError(
+        f"Camada publicada nao encontrada para expansao semantica: {PUBLISHED_SOURCE_PATH}"
+    )
 
 def build_logistics_slice(df: pd.DataFrame) -> pd.DataFrame:
     logistics = (
@@ -154,6 +176,21 @@ def save_dataset(df: pd.DataFrame, path: Path) -> None:
     df.to_csv(path.with_suffix(".csv"), index=False)
 
 
+def stage_dataset(df: pd.DataFrame, path: Path, temp_dir: Path) -> tuple[Path, Path]:
+    token = f"{datetime.utcnow().timestamp():.6f}"
+    parquet_tmp = temp_dir / f"{path.name}.{token}.tmp"
+    csv_target = path.with_suffix(".csv")
+    csv_tmp = temp_dir / f"{csv_target.name}.{token}.tmp"
+    df.to_parquet(parquet_tmp, index=False)
+    df.to_csv(csv_tmp, index=False)
+    return parquet_tmp, csv_tmp
+
+
+def commit_staged_dataset(parquet_tmp: Path, csv_tmp: Path, target: Path) -> None:
+    parquet_tmp.replace(target)
+    csv_tmp.replace(target.with_suffix(".csv"))
+
+
 def render_report(
     logistics: pd.DataFrame,
     seller: pd.DataFrame,
@@ -189,22 +226,41 @@ def render_report(
 def run_semantic_layer() -> SemanticArtifacts:
     ensure_directory(PUBLISHED_SEMANTIC_DIR)
     ensure_directory(DOCS_DIR)
+    temp_dir = PUBLISHED_SEMANTIC_DIR / '.tmp_semantic_layer'
+    ensure_directory(temp_dir)
+
     published = load_published_table()
     logistics = build_logistics_slice(published)
     seller = build_seller_slice(published)
     cohort = build_cohort_slice(published)
     category = build_category_slice(published)
     state = build_state_performance_slice(published)
-    save_dataset(logistics, LOGISTICS_PATH)
-    save_dataset(seller, SELLER_PATH)
-    save_dataset(cohort, COHORT_PATH)
-    save_dataset(category, CATEGORY_PATH)
-    save_dataset(state, STATE_PATH)
-    REPORT_PATH.write_text(
-        render_report(logistics, seller, cohort, category, state), encoding="utf-8"
-    )
+
+    staged: list[tuple[Path, Path, Path]] = []
+    try:
+        for df, target in (
+            (logistics, LOGISTICS_PATH),
+            (seller, SELLER_PATH),
+            (cohort, COHORT_PATH),
+            (category, CATEGORY_PATH),
+            (state, STATE_PATH),
+        ):
+            parquet_tmp, csv_tmp = stage_dataset(df, target, temp_dir)
+            staged.append((parquet_tmp, csv_tmp, target))
+
+        for parquet_tmp, csv_tmp, target in staged:
+            commit_staged_dataset(parquet_tmp, csv_tmp, target)
+
+        REPORT_PATH.write_text(
+            render_report(logistics, seller, cohort, category, state),
+            encoding='utf-8',
+        )
+    finally:
+        for candidate in temp_dir.glob('*.tmp'):
+            candidate.unlink(missing_ok=True)
+
     LOGGER.info(
-        "Camada semantica expandida materializada em %s", PUBLISHED_SEMANTIC_DIR
+        'Camada semantica expandida materializada em %s', PUBLISHED_SEMANTIC_DIR
     )
     return SemanticArtifacts(
         logistics_path=LOGISTICS_PATH,

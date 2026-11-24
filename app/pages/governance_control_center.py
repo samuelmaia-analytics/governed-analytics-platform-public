@@ -12,6 +12,7 @@ from app.i18n import LOCALE_EN_US, Locale
 from src.config import PUBLISHED_MONITORING_DIR
 from src.governance_history import append_governance_history
 from src.governance_types import DataQualityResult, PrivacyRiskResult
+from src.public_mode import is_public_visitor_mode
 from src.publication_gate import (
     PublicationReadinessDecision,
     evaluate_publication_readiness,
@@ -225,6 +226,9 @@ def _data_quality_score(quality_results: DataQualityResult) -> int:
 
 
 def _load_schema_contract_status() -> tuple[Literal["passed", "failed"], str | None]:
+    if is_public_visitor_mode():
+        return "failed", None
+
     if not SCHEMA_CONTRACT_RESULTS_PATH.exists():
         return "passed", "Schema contract results file not found; assumed 'passed'."
     try:
@@ -241,6 +245,9 @@ def _load_schema_contract_status() -> tuple[Literal["passed", "failed"], str | N
 
 
 def _load_freshness_status() -> tuple[Literal["fresh", "warning", "stale"], str | None]:
+    if is_public_visitor_mode():
+        return "stale", None
+
     if not PUBLISHED_MONITORING_RESULTS_PATH.exists():
         return "fresh", "Published monitoring file not found; assumed 'fresh'."
     try:
@@ -340,6 +347,9 @@ def _evaluate_publication_gate(
 
 
 def _load_governance_history(path: Path = GOVERNANCE_HISTORY_PATH) -> pd.DataFrame:
+    if is_public_visitor_mode():
+        return pd.DataFrame()
+
     if not path.exists():
         return pd.DataFrame()
     history_df = pd.read_csv(path)

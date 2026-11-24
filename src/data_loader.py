@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from io import BytesIO
 from pathlib import Path
 
@@ -9,6 +8,7 @@ import pandas as pd
 from src.public_distribution_authorization import (
     public_distribution_artifact_authorized,
 )
+from src.public_mode import is_public_visitor_mode
 from src.schema_contract_components.discovery import load_contract, normalize_csv_dates
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +20,7 @@ DEFAULT_PUBLIC_DEMO_DATASET = (
 
 def load_dataset(dataset_path: str | Path | None = None) -> pd.DataFrame:
     """Load a dataset from a provided path or from the project sample dataset."""
-    public_mode = os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true"
+    public_mode = is_public_visitor_mode()
     source_path = (
         Path(dataset_path)
         if dataset_path
@@ -29,7 +29,7 @@ def load_dataset(dataset_path: str | Path | None = None) -> pd.DataFrame:
     if not source_path.exists():
         if (
             source_path == DEFAULT_SAMPLE_DATASET
-            and os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() != "true"
+            and not is_public_visitor_mode()
         ):
             return pd.DataFrame(
                 {
@@ -44,7 +44,7 @@ def load_dataset(dataset_path: str | Path | None = None) -> pd.DataFrame:
         raise FileNotFoundError(f"Dataset not found: {source_path}")
     root = PROJECT_ROOT
     source: Path | BytesIO = source_path
-    if os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true":
+    if is_public_visitor_mode():
         name = "data/samples/gap_public_demo_synthetic_v1.parquet"
         if source_path.resolve() != root / name or source_path.is_symlink():
             raise PermissionError("Dataset is outside the public demo scope.")

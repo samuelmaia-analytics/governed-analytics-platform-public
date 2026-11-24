@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "authorizations": []
+  "authorizations": [
+    {
+      "file": "data/samples/gap_public_demo_synthetic_v1.parquet",
+      "sha256": "9fe727d2e5f60ac8e2a9c7e6c4d979102882a11afa7874100c5705bcaa51a1c7",
+      "purpose": "synthetic_demo_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true,
+      "generator_version": "gap-synthetic-demo-v2",
+      "generated_by": "scripts/generate_synthetic_public_demo.py",
+      "rows": 100001,
+      "grain": "one row per order_id + order_item_id",
+      "notes": "Synthetic-only portfolio fixture. No real Olist records. Approved by owner for public portfolio distribution on 2026-11-24. Keep Publication Gate fail-closed for all other artifacts."
+    }
+  ]
 }

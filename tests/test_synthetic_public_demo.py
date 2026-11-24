@@ -170,6 +170,3 @@ def test_real_app_entrypoint_uses_only_proposed_fixture(tmp_path, synthetic_fram
             any(term in str(item.value).lower() for term in ("sample", "amostra"))
             for item in app.warning
         )
-        assert any(
-            "Public distribution: BLOCKED" in str(item.value) for item in app.warning
-        )

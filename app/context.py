@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from src.data_quality import run_data_quality_checks
 from src.governance_types import DataQualityResult, PrivacyRiskResult
 from src.lgpd_classifier import classify_dataframe_columns
 from src.public_distribution_authorization import public_demo_authorization_complete
+from src.public_mode import is_public_visitor_mode
 from src.publication_gate import (
     OperationalPublicationGateDecision,
     evaluate_operational_publication_gate,
@@ -76,7 +76,7 @@ def _load_platform_dataframe(path: Path) -> pd.DataFrame:
 
 
 def load_input_dataframe(locale: Locale) -> pd.DataFrame:
-    if os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() == "true":
+    if is_public_visitor_mode():
         # Public mode never routes to historical data or arbitrary uploads.
         return _load_platform_dataframe(DEFAULT_PUBLIC_DEMO_DATASET)
     st.sidebar.header(t("data_source_header", locale))
