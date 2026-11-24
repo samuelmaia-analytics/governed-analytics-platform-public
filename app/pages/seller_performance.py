@@ -137,7 +137,14 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         "logístico e contribuição estimada."
     )
 
-    seller_df = build_seller_slice(df) if is_public_visitor_mode() and df is not None and not df.empty else _load_seller_slice()
+    if is_public_visitor_mode():
+        seller_df = (
+            build_seller_slice(df)
+            if df is not None and not df.empty
+            else pd.DataFrame()
+        )
+    else:
+        seller_df = _load_seller_slice()
     if seller_df.empty:
         st.info("Dados de sellers não disponíveis neste ambiente.")
         st.caption(

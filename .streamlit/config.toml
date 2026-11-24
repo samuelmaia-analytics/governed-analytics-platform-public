@@ -1,0 +1,16 @@
+[theme]
+font = "sans-serif"
+baseRadius = "0.65rem"
+showWidgetBorder = true
+
+[theme.light]
+primaryColor = "#005d91"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f5fa"
+textColor = "#15293e"
+
+[theme.dark]
+primaryColor = "#72d4f4"
+backgroundColor = "#111c2b"
+secondaryBackgroundColor = "#1b2a3c"
+textColor = "#edf4ff"

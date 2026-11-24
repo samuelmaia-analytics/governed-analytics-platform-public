@@ -128,7 +128,7 @@ def test_public_startup_checks_grants_hash_and_live_revocation(root, monkeypatch
     uploader.assert_not_called()
     app = AppTest.from_file(str(ROOT / "app/main.py"), default_timeout=45).run()
     assert not app.exception
-    assert app.title
+    assert any("<h1>Governed Analytics Platform</h1>" in item.value for item in app.markdown)
     policy = root / "config/public_revocations.json"
     policy.write_text(
         json.dumps(

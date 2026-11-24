@@ -68,7 +68,14 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
     )
     st.markdown("**Retenção = clientes no mês relativo ÷ clientes do Mês 0 × 100**")
 
-    cohort_df = build_cohort_slice(df) if is_public_visitor_mode() and df is not None and not df.empty else _load_cohort_slice()
+    if is_public_visitor_mode():
+        cohort_df = (
+            build_cohort_slice(df)
+            if df is not None and not df.empty
+            else pd.DataFrame()
+        )
+    else:
+        cohort_df = _load_cohort_slice()
 
     required = {
         "purchase_cohort_month",

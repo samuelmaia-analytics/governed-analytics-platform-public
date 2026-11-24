@@ -2,117 +2,61 @@ from __future__ import annotations
 
 import streamlit as st
 
+PUBLIC_REPOSITORY = (
+    "https://github.com/samuelmaia-analytics/governed-analytics-platform-public"
+)
+
 _BASE_CSS = """
 <style>
-:root {
-  --gap-radius: 14px;
-  --gap-bg: rgba(255, 255, 255, 0.78);
-  --gap-border: rgba(49, 51, 63, 0.14);
-  --gap-muted: rgba(49, 51, 63, 0.65);
+.gap-hero {
+  --gap-hero-ink: #f3f7ff;
+  --gap-hero-muted: #c4d4e8;
+  --gap-hero-accent: #79e2ef;
+  background: linear-gradient(125deg, #101e33, #162f4a 70%, #16445a);
+  color: var(--gap-hero-ink);
+  border: 1px solid #46718d;
+  border-radius: 18px;
+  padding: clamp(1.25rem, 5vw, 3.25rem);
+  margin-block: 0.25rem 0.75rem;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --gap-bg: rgba(20, 22, 26, 0.72);
-    --gap-border: rgba(255, 255, 255, 0.12);
-    --gap-muted: rgba(255, 255, 255, 0.70);
-  }
+.gap-hero h1 {
+  color: var(--gap-hero-ink);
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  padding: 0;
+  margin: 0.6rem 0;
 }
-
-.gap-hero-title {
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  margin: 0;
+.gap-hero p {
+  color: var(--gap-hero-muted);
+  max-width: 62ch;
+  margin: 0.75rem 0 0;
 }
-
-.gap-hero-subtitle {
-  font-size: 16px;
-  color: var(--gap-muted);
-  margin-top: 6px;
-}
-
-.gap-card {
-  background: var(--gap-bg);
-  border: 1px solid var(--gap-border);
-  border-radius: var(--gap-radius);
-  padding: 14px 16px;
-}
-
-.gap-card-label {
-  font-size: 12px;
+.gap-hero .gap-kicker {
+  color: var(--gap-hero-accent);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.075em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--gap-muted);
-  margin-bottom: 8px;
 }
-
-.gap-card-value {
-  font-size: 22px;
-  font-weight: 650;
-  line-height: 1.2;
-  margin: 0;
+.gap-hero .gap-lead {
+  color: var(--gap-hero-ink);
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 600;
 }
-
-.gap-card-delta {
-  font-size: 12px;
-  color: var(--gap-muted);
-  margin-top: 6px;
-}
-
-.gap-section-title {
-  font-size: 18px;
-  font-weight: 650;
-  margin: 18px 0 10px 0;
-}
-
-.gap-footer {
-  margin-top: 34px;
-  padding: 16px 0 6px 0;
-  border-top: 1px solid var(--gap-border);
-  color: var(--gap-muted);
-  font-size: 12px;
-}
-
-.gap-footer a { color: inherit; }
 </style>
 """
 
 
 def inject_base_styles() -> None:
-    """Inject theme-aware CSS without Streamlit internal selectors."""
-
-    if st.session_state.get("_gap_base_styles", False):
-        return
     st.markdown(_BASE_CSS, unsafe_allow_html=True)
-    st.session_state["_gap_base_styles"] = True
-
-
-def render_section_title(title: str) -> None:
-    st.markdown(
-        f'<div class="gap-section-title">{title}</div>',
-        unsafe_allow_html=True,
-    )
 
 
 def render_footer(*, locale: str) -> None:
-    is_en = locale == "en-US"
     label = (
-        "Personal portfolio project - Samuel Maia"
-        if is_en
-        else "Projeto pessoal de portf\u00f3lio - Samuel Maia"
+        "Independent portfolio project by Samuel Maia"
+        if locale == "en-US"
+        else "Projeto independente de portfólio de Samuel Maia"
     )
-    st.markdown(
-        """
-<div class="gap-footer">
-  <div>{label}</div>
-  <div>
-    <a href="https://github.com/samuelmaia-analytics/Governed-Analytics-Platform" target="_blank" rel="noreferrer">GitHub</a>
-    . <a href="https://samuelmaia-analytics.github.io/samuelmaia-analytics/" target="_blank" rel="noreferrer">Portf\u00f3lio</a>
-    . <a href="https://www.linkedin.com/in/samuelmaia-analytics/" target="_blank" rel="noreferrer">LinkedIn</a>
-  </div>
-</div>
-        """.format(label=label),
-        unsafe_allow_html=True,
-    )
+    st.divider()
+    st.caption(f"{label} · [GitHub]({PUBLIC_REPOSITORY})")

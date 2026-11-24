@@ -170,10 +170,10 @@ def test_real_app_entrypoint_uses_only_proposed_fixture(tmp_path, synthetic_fram
         context._build_context_from_dataframe.clear()
         app = AppTest.from_file(str(ROOT / "app/main.py"), default_timeout=45).run()
         assert not app.exception
-        assert any("GOVERNED ANALYTICS PLATFORM" in title.value for title in app.title)
+        assert any("<h1>Governed Analytics Platform</h1>" in item.value for item in app.markdown)
         assert any(
-            any(term in str(item.value).lower() for term in ("sample", "amostra"))
-            for item in app.warning
+            any(term in item.value.lower() for term in ("this input", "este dataset"))
+            for item in app.info
         )
 
 
