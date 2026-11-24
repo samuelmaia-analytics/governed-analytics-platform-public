@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "repository": "samuelmaia-analytics/Governed-Analytics-Platform",
+  "authorizations": [
+    {
+      "dataset": "docs/architecture/local_data_lake.md",
+      "version": "bcea8ab2ee07db1690123d83b2e3d2776a243bc59a6a1c1103732f0fc982bb9a",
+      "sha256": "bcea8ab2ee07db1690123d83b2e3d2776a243bc59a6a1c1103732f0fc982bb9a",
+      "purpose": "documentation_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true
+    },
+    {
+      "dataset": "docs/data_contracts.md",
+      "version": "c4e8f670eb5fc01fb1259f614e76debe4a21e12b06b580b5f0153a493e397b2b",
+      "sha256": "c4e8f670eb5fc01fb1259f614e76debe4a21e12b06b580b5f0153a493e397b2b",
+      "purpose": "documentation_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true
+    },
+    {
+      "dataset": "docs/architecture/semantic_layer.md",
+      "version": "4a8ce136ef3b891a413fe49d611234f4dc0a5e7fc8fc9b00cd440c8c50d8738e",
+      "sha256": "4a8ce136ef3b891a413fe49d611234f4dc0a5e7fc8fc9b00cd440c8c50d8738e",
+      "purpose": "documentation_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true
+    },
+    {
+      "dataset": "docs/governance/public_scope.md",
+      "version": "b3377ddf6c115ab5560eafa3ab07a9f17ba6ad9d54275f2c720206f69415a761",
+      "sha256": "b3377ddf6c115ab5560eafa3ab07a9f17ba6ad9d54275f2c720206f69415a761",
+      "purpose": "documentation_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true
+    },
+    {
+      "dataset": "docs/governance/public_readme.md",
+      "version": "06cdac9be13650570a315155e7ad2ef11d3468ee96f5004738c9c155001796e6",
+      "sha256": "06cdac9be13650570a315155e7ad2ef11d3468ee96f5004738c9c155001796e6",
+      "purpose": "documentation_preview",
+      "audience": "public",
+      "status": "Approved",
+      "publication_authorized": true
+    }
+  ]
+}

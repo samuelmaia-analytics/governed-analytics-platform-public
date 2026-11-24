@@ -1,0 +1,55 @@
+dataset_name: fact_orders_dashboard
+layer: published
+contract: contracts/published/fact_orders_dashboard.contract.json
+# Scope follows the published contract, not the generic revenue/email example.
+rules:
+  - name: published_primary_key_not_null
+    type: not_null
+    columns: [order_id, order_item_id]
+    severity: high
+  - name: published_primary_key_unique
+    type: unique
+    columns: [order_id, order_item_id]
+    severity: high
+  - name: published_order_item_positive
+    type: accepted_range
+    columns: [order_item_id]
+    params: {min: 1}
+    severity: high
+  - name: published_status_not_null
+    type: not_null
+    columns: [order_status]
+    severity: high
+  - name: published_status_allowed_values
+    type: allowed_values
+    columns: [order_status]
+    params: {allowed: [delivered, shipped, canceled, processing]}
+    severity: medium
+  - name: published_order_date_not_null
+    type: not_null
+    columns: [order_date]
+    severity: high
+  - name: published_order_date_no_future
+    type: no_future_dates
+    columns: [order_date]
+    severity: medium
+  - name: published_total_item_value_not_null
+    type: not_null
+    columns: [total_item_value]
+    severity: high
+  - name: published_total_item_value_non_negative
+    type: no_negative_values
+    columns: [total_item_value]
+    severity: medium
+  - name: published_customer_key_not_null
+    type: not_null
+    columns: [customer_unique_id]
+    severity: high
+  - name: published_seller_key_not_null
+    type: not_null
+    columns: [seller_key]
+    severity: high
+  - name: published_customer_state_not_null
+    type: not_null
+    columns: [customer_state]
+    severity: high

@@ -1,0 +1,389 @@
+from __future__ import annotations
+
+import re
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Pattern, cast
+
+import pandas as pd
+import yaml  # type: ignore[import-untyped]
+
+from src.governance_types import LGPDClassification, RecommendedAction, RiskLevel
+
+PERSONAL_TERMS = {
+    "email",
+    "cpf",
+    "cnpj",
+    "phone",
+    "telefone",
+    "address",
+    "endereco",
+    "birth_date",
+    "data_nascimento",
+    "user_id",
+    "customer_id",
+    "document",
+    "documento",
+    "gender",
+    "genero",
+}
+SENSITIVE_TERMS = {"health", "saude", "biometric", "biometrico"}
+INDIRECT_IDENTIFIER_TERMS = {
+    "city",
+    "state",
+    "zip",
+    "postal",
+    "birth",
+    "device",
+    "session",
+    "ip",
+}
+PERSONAL_NAME_CONTEXT_TERMS = {
+    "cliente",
+    "completo",
+    "contato",
+    "pessoa",
+    "primeiro",
+    "ultimo",
+    "usuario",
+    "contact",
+    "customer",
+    "first",
+    "full",
+    "last",
+    "person",
+    "user",
+}
+TECHNICAL_IDENTIFIER_CLASSIFICATIONS: dict[str, LGPDClassification] = {
+    "order_id": "indirect_identifier",
+    "customer_unique_id": "personal_data",
+    "seller_key": "indirect_identifier",
+}
+
+REGEX_PATTERNS: dict[str, Pattern[str]] = {
+    "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    "cpf": re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"),
+    "cnpj": re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b"),
+    "phone": re.compile(r"(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9?\d{4})-?\d{4}"),
+    "ip": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+}
+
+DEFAULT_RULES_PATH = Path("contracts/governance/lgpd_classification_rules.yml")
+
+
+@dataclass(frozen=True)
+class ColumnClassification:
+    lgpd_classification: LGPDClassification
+    risk_level: RiskLevel
+    recommended_action: RecommendedAction
+    reason: str
+
+
+@dataclass(frozen=True)
+class ContractRule:
+    lgpd_classification: LGPDClassification
+    risk_level: RiskLevel
+    recommended_action: RecommendedAction
+    reason: str
+
+
+@dataclass(frozen=True)
+class ClassificationContract:
+    exact: dict[str, ContractRule]
+    contains: list[tuple[str, ContractRule]]
+    regex: list[tuple[Pattern[str], ContractRule]]
+
+
+def normalize_name(column_name: str) -> str:
+    return column_name.strip().lower()
+
+
+def _normalize_header(column_name: str) -> str:
+    # Keep contract keys and original dataframe headers unchanged.
+    header = (
+        unicodedata.normalize("NFKD", column_name)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    header = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", header)
+    header = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", header)
+    return re.sub(r"[^a-z0-9]+", "_", header.lower()).strip("_")
+
+
+def _name_tokens(column_name: str) -> set[str]:
+    return set(_normalize_header(column_name).split("_"))
+
+
+def _contains_term(column_name: str, term: str) -> bool:
+    normalized = _normalize_header(column_name)
+    return re.search(rf"(?:^|_){re.escape(term)}(?:_|$)", normalized) is not None
+
+
+def _as_lgpd_classification(value: str) -> LGPDClassification:
+    allowed = {
+        "non_personal",
+        "personal_data",
+        "sensitive_personal_data",
+        "indirect_identifier",
+    }
+    normalized = value.strip()
+    return cast(
+        LGPDClassification, normalized if normalized in allowed else "non_personal"
+    )
+
+
+def _as_risk_level(value: str) -> RiskLevel:
+    allowed = {"low", "medium", "high"}
+    normalized = value.strip().lower()
+    return cast(RiskLevel, normalized if normalized in allowed else "medium")
+
+
+def _as_recommended_action(value: str) -> RecommendedAction:
+    allowed = {"keep", "mask", "anonymize", "remove", "review"}
+    normalized = value.strip().lower()
+    return cast(RecommendedAction, normalized if normalized in allowed else "review")
+
+
+def load_classification_contract(
+    contract_path: str | Path | None = DEFAULT_RULES_PATH,
+) -> ClassificationContract:
+    if contract_path is None:
+        return ClassificationContract(exact={}, contains=[], regex=[])
+    path = Path(contract_path)
+    if not path.exists():
+        return ClassificationContract(exact={}, contains=[], regex=[])
+
+    content = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    column_rules = content.get("column_rules", {})
+
+    exact_rules: dict[str, ContractRule] = {}
+    for column_name, rule in (column_rules.get("exact", {}) or {}).items():
+        exact_rules[normalize_name(str(column_name))] = ContractRule(
+            lgpd_classification=_as_lgpd_classification(
+                str(rule["lgpd_classification"])
+            ),
+            risk_level=_as_risk_level(str(rule["risk_level"])),
+            recommended_action=_as_recommended_action(str(rule["recommended_action"])),
+            reason=str(rule["reason"]),
+        )
+
+    contains_rules: list[tuple[str, ContractRule]] = []
+    for item in column_rules.get("contains", []) or []:
+        contains_rules.append(
+            (
+                normalize_name(str(item["token"])),
+                ContractRule(
+                    lgpd_classification=_as_lgpd_classification(
+                        str(item["lgpd_classification"])
+                    ),
+                    risk_level=_as_risk_level(str(item["risk_level"])),
+                    recommended_action=_as_recommended_action(
+                        str(item["recommended_action"])
+                    ),
+                    reason=str(item["reason"]),
+                ),
+            )
+        )
+
+    regex_rules: list[tuple[Pattern[str], ContractRule]] = []
+    for item in column_rules.get("regex", []) or []:
+        regex_rules.append(
+            (
+                re.compile(str(item["pattern"])),
+                ContractRule(
+                    lgpd_classification=_as_lgpd_classification(
+                        str(item["lgpd_classification"])
+                    ),
+                    risk_level=_as_risk_level(str(item["risk_level"])),
+                    recommended_action=_as_recommended_action(
+                        str(item["recommended_action"])
+                    ),
+                    reason=str(item["reason"]),
+                ),
+            )
+        )
+
+    return ClassificationContract(
+        exact=exact_rules, contains=contains_rules, regex=regex_rules
+    )
+
+
+def classify_by_contract(
+    column_name: str, contract: ClassificationContract
+) -> ColumnClassification | None:
+    normalized = normalize_name(column_name)
+
+    exact_match = contract.exact.get(normalized)
+    if exact_match is not None:
+        return ColumnClassification(
+            lgpd_classification=exact_match.lgpd_classification,
+            risk_level=exact_match.risk_level,
+            recommended_action=exact_match.recommended_action,
+            reason=exact_match.reason,
+        )
+
+    for token, rule in contract.contains:
+        if token in normalized:
+            return ColumnClassification(
+                lgpd_classification=rule.lgpd_classification,
+                risk_level=rule.risk_level,
+                recommended_action=rule.recommended_action,
+                reason=rule.reason,
+            )
+
+    for pattern, rule in contract.regex:
+        if pattern.search(column_name):
+            return ColumnClassification(
+                lgpd_classification=rule.lgpd_classification,
+                risk_level=rule.risk_level,
+                recommended_action=rule.recommended_action,
+                reason=rule.reason,
+            )
+
+    return None
+
+
+def detect_by_column_name(column_name: str) -> tuple[LGPDClassification, str]:
+    normalized = normalize_name(column_name)
+    technical_classification = TECHNICAL_IDENTIFIER_CLASSIFICATIONS.get(normalized)
+    if technical_classification is not None:
+        return (
+            technical_classification,
+            "Column name matches the governed technical-identifier policy.",
+        )
+
+    header = _normalize_header(column_name)
+    if any(_contains_term(header, term) for term in SENSITIVE_TERMS):
+        return "sensitive_personal_data", "Column name indicates sensitive data."
+
+    tokens = _name_tokens(header)
+    has_personal_name = header in {"name", "nome"} or (
+        bool({"name", "nome"} & tokens) and bool(PERSONAL_NAME_CONTEXT_TERMS & tokens)
+    )
+    if has_personal_name or any(
+        _contains_term(header, term) for term in PERSONAL_TERMS
+    ):
+        return "personal_data", "Column name indicates personal data."
+    if any(_contains_term(header, term) for term in INDIRECT_IDENTIFIER_TERMS):
+        return (
+            "indirect_identifier",
+            "Column name indicates indirect identification risk.",
+        )
+    return "non_personal", "No personal-data indicators found in column name."
+
+
+def detect_by_regex(series: pd.Series) -> tuple[LGPDClassification, str]:
+    if series.empty:
+        return "non_personal", "Column has no values to profile."
+
+    sample_values = series.dropna().astype(str).head(200)
+    if sample_values.empty:
+        return "non_personal", "Column has only null values."
+
+    if pd.api.types.is_numeric_dtype(
+        series.dtype
+    ) or pd.api.types.is_datetime64_any_dtype(series.dtype):
+        return (
+            "non_personal",
+            "Value regex profiling skipped for numeric or temporal column.",
+        )
+
+    regex_classifications: tuple[tuple[str, LGPDClassification, str], ...] = (
+        ("email", "personal_data", "Regex matched email pattern in sampled values."),
+        ("cpf", "personal_data", "Regex matched CPF pattern in sampled values."),
+        ("cnpj", "personal_data", "Regex matched CNPJ pattern in sampled values."),
+        ("ip", "indirect_identifier", "Regex matched IP pattern in sampled values."),
+        ("phone", "personal_data", "Regex matched phone pattern in sampled values."),
+    )
+    values = sample_values.tolist()
+    result: LGPDClassification = "non_personal"
+    reasons: list[str] = []
+    for pattern_name, classification, reason in regex_classifications:
+        if any(REGEX_PATTERNS[pattern_name].search(value) for value in values):
+            result = merge_signal_priority(result, classification)
+            reasons.append(reason)
+    if reasons:
+        return result, " ".join(reasons)
+    return "non_personal", "No personal-data regex pattern matched sampled values."
+
+
+def merge_signal_priority(
+    name_signal: LGPDClassification, regex_signal: LGPDClassification
+) -> LGPDClassification:
+    priority = {
+        "sensitive_personal_data": 4,
+        "personal_data": 3,
+        "indirect_identifier": 2,
+        "non_personal": 1,
+    }
+    return (
+        name_signal if priority[name_signal] >= priority[regex_signal] else regex_signal
+    )
+
+
+def map_risk_and_action(
+    classification: LGPDClassification, column_name: str
+) -> tuple[RiskLevel, RecommendedAction]:
+    lowered = _normalize_header(column_name)
+    if classification == "sensitive_personal_data":
+        if any(token in lowered for token in ["biometric", "biometrico"]):
+            return "high", "remove"
+        return "high", "anonymize"
+    if classification == "personal_data":
+        if any(token in lowered for token in ["cpf", "cnpj", "document", "documento"]):
+            return "high", "remove"
+        return "high", "mask"
+    if classification == "indirect_identifier":
+        return "medium", "review"
+    return "low", "keep"
+
+
+def classify_column(column_name: str, series: pd.Series) -> ColumnClassification:
+    name_signal, name_reason = detect_by_column_name(column_name)
+    if normalize_name(column_name) in TECHNICAL_IDENTIFIER_CLASSIFICATIONS:
+        risk_level, recommended_action = map_risk_and_action(name_signal, column_name)
+        return ColumnClassification(
+            lgpd_classification=name_signal,
+            risk_level=risk_level,
+            recommended_action=recommended_action,
+            reason=name_reason,
+        )
+
+    regex_signal, regex_reason = detect_by_regex(series)
+    final_classification = merge_signal_priority(name_signal, regex_signal)
+    risk_level, recommended_action = map_risk_and_action(
+        final_classification, column_name
+    )
+    reason = f"{name_reason} {regex_reason}".strip()
+    return ColumnClassification(
+        lgpd_classification=final_classification,
+        risk_level=risk_level,
+        recommended_action=recommended_action,
+        reason=reason,
+    )
+
+
+def classify_dataframe_columns(
+    df: pd.DataFrame, contract_path: str | Path | None = DEFAULT_RULES_PATH
+) -> pd.DataFrame:
+    contract = load_classification_contract(contract_path)
+    rows: list[dict[str, object]] = []
+    for column_name in df.columns:
+        contract_result = classify_by_contract(column_name, contract)
+        column_result = (
+            contract_result
+            if contract_result is not None
+            else classify_column(column_name, df[column_name])
+        )
+        rows.append(
+            {
+                "column_name": column_name,
+                "dtype": str(df[column_name].dtype),
+                "lgpd_classification": column_result.lgpd_classification,
+                "risk_level": column_result.risk_level,
+                "recommended_action": column_result.recommended_action,
+                "reason": column_result.reason,
+            }
+        )
+    return pd.DataFrame(rows)

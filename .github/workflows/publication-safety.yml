@@ -1,0 +1,22 @@
+name: Publication Safety
+
+on:
+  pull_request:
+  push:
+    branches: [main, streamlit-prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publication-safety:
+    name: publication-safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Check committed distribution
+        run: python src/repository_publication.py --ref HEAD

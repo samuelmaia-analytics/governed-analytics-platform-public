@@ -1,0 +1,22 @@
+project:
+  name: Governed Analytics Platform
+  environment: local
+
+paths:
+  data_input: data/
+  logs: logs/
+  docs: docs/
+
+pipeline:
+  enable_data_quality: true
+  enable_lgpd_classification: true
+  enable_privacy_risk_score: true
+  enable_docs_generation: true
+
+alerts:
+  enabled: false
+  channel: placeholder
+
+logging:
+  format: csv
+  file: logs/pipeline_execution_logs.csv

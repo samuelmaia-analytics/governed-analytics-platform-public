@@ -1,0 +1,46 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - develop
+      - release
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          # Cache uploads are held pending content review.
+
+      - name: Check source distribution
+        run: python src/repository_publication.py --ref HEAD
+
+      - name: Install dependencies
+        run: |
+          python -m pip install uv
+          uv sync --extra dev
+
+      - name: Run Ruff
+        run: uv run ruff check src app tests

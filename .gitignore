@@ -1,0 +1,99 @@
+.idea/
+.venv/
+__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+!.env.example
+
+# Local development configuration
+AGENTS.md
+AGENTS.local.md
+.codex/
+
+# Runtime logs
+logs/*
+!logs/.gitkeep
+!logs/pipeline_execution_logs.csv
+!logs/data_quality_logs.csv
+!logs/lgpd_classification_logs.csv
+!logs/publication_gate_logs.csv
+!logs/error_logs.csv
+
+# Keep raw data delivered with the case
+!data/raw/
+!data/raw/landing/
+!data/raw/landing/olist/
+
+# Ignore generated Data Lake layers
+data/standardized/*
+!data/standardized/.gitkeep
+
+data/staging/*
+!data/staging/.gitkeep
+
+data/quarantine/*
+!data/quarantine/.gitkeep
+
+data/curated/*
+!data/curated/.gitkeep
+!data/curated/catalog/
+!data/curated/catalog/*.json
+!data/curated/catalog/*.csv
+!data/curated/genai/
+!data/curated/genai/*.csv
+!data/curated/genai/*.jsonl
+
+data/published/*
+!data/published/.gitkeep
+!data/published/dashboard/
+data/published/dashboard/*
+!data/published/dashboard/.gitkeep
+!data/published/semantic/
+!data/published/semantic/*.parquet
+!data/published/semantic/*.csv
+!data/published/monitoring/
+!data/published/monitoring/*.json
+!data/published/monitoring/*.csv
+
+# Optional local-only data
+data/external/*
+!data/external/.gitkeep
+!data/external/genai/
+!data/external/genai/*.csv
+
+# Keep screenshots used in the case documentation
+!data/screenshots/
+!data/screenshots/query_results/
+
+# Private pipeline inputs and generated outputs stay local.
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+!/data/README.md
+!/data/published/monitoring/publication_decision.json
+/powerbi/*.csv
+/powerbi/*.png
+*.pbix
+*.pbit
+/dist/
+
+# Generated logs and local documents must not enter distribution.
+/logs/*
+!/logs/.gitkeep
+*.pdf
+*.docx
+*.xlsx
+
+# Historical CSV fixtures remain private; regression uses in-memory generators.
+/tests/fixtures/
+/docs/reports/
+/docs/governance/lgpd*.md

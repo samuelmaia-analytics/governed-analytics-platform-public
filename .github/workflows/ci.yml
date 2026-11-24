@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - release
+      - main
+      - master
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          # Cache uploads are held pending content review.
+
+      - name: Check source distribution
+        run: python src/repository_publication.py --ref HEAD
+
+      - name: Install dependencies
+        run: |
+          python -m pip install uv
+          uv sync --extra dev
+
+      - name: Run Ruff
+        run: uv run ruff check src app tests
+
+      - name: Run MyPy (governance modules and app shell)
+        run: >
+          uv run mypy
+          src/data_loader.py
+          src/data_quality.py
+          src/eda.py
+          src/lgpd_classifier.py
+          src/risk_scoring.py
+          src/privacy_transformations.py
+          src/data_quality_rules.py
+          src/governance_history.py
+          src/report_generator.py
+          src/governance_types.py
+          app/main.py
+          app/context.py
+          app/components/cards.py
+          app/pages/data_catalog.py
+          app/pages/data_quality.py
+          app/pages/eda.py
+          app/pages/executive_overview.py
+          app/pages/governance_control_center.py
+          app/pages/governance_report.py
+          app/pages/lgpd_privacy_risk.py
+
+      - name: Smoke check pipeline entrypoint
+        run: uv run python src/run_platform_pipeline.py --list-steps
+
+      - name: Validate release governance contract
+        run: uv run python src/governance_validation.py
+
+      - name: Publication gate smoke test
+        run: >
+          uv run python -c
+          "from src.publication_gate import evaluate_publication_readiness; r = evaluate_publication_readiness(data_quality_score=95, privacy_risk_score=20, critical_rule_failures=0, freshness_status='fresh', schema_contract_status='passed', has_sensitive_data_without_protection=False); assert r.decision in {'Approved','Needs Review','Blocked'}"
+
+      - name: Run tests with coverage (global)
+        run: uv run pytest --cov=src --cov=app --cov-report=xml --cov-fail-under=80
+
+      - name: Generate coverage report for src flag
+        run: uv run pytest --cov=src --cov-report=xml:coverage-src.xml --cov-report=
+
+      - name: Generate coverage report for app flag
+        run: uv run pytest --cov=app --cov-report=xml:coverage-app.xml --cov-report=

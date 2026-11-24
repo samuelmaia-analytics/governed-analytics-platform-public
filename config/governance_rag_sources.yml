@@ -1,0 +1,31 @@
+version: 1
+sources:
+  - path: contracts/customer_privacy_contract.yml
+    approved: true
+    sha256: "f4300e81cd0084e0a427994e05033a0d259dc944f11a13948e0be12e158c6082"
+  - path: contracts/gold_fact_orders_contract.yml
+    approved: true
+    sha256: "2d75bda95ef98edba4d8646c115c6314a1b27be044ad827ff53b666c53d501c4"
+  - path: contracts/data_quality_rules.yml
+    approved: true
+    sha256: "41c3cde6dd466347a88e92e028c550b89c33bec5d4f56e7e4f420c6f12d874d0"
+evaluation:
+  - question: Quais regras de qualidade se aplicam a gold_fact_orders?
+    expected_sources:
+      - contracts/gold_fact_orders_contract.yml
+  - question: O que exige o contrato customer_privacy_controls para publication?
+    expected_sources:
+      - contracts/customer_privacy_contract.yml
+  - question: O que devo conferir antes de publicar dados de clientes?
+    expected_sources:
+      - contracts/customer_privacy_contract.yml
+  - question: O que devo conferir antes de publicar dados de pedidos?
+    expected_sources:
+      - contracts/gold_fact_orders_contract.yml
+  - question: Quais regras order_id_unique e revenue_no_negative existem?
+    expected_sources:
+      - contracts/data_quality_rules.yml
+  - question: Por que a publicacao run_999 foi bloqueada?
+    expected_sources: []
+  - question: Qual a previsao meteorologica em Marte?
+    expected_sources: []

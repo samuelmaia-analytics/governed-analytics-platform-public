@@ -1,0 +1,168 @@
+from __future__ import annotations
+
+import json
+import os
+import secrets
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+
+from src.config import PUBLISHED_MONITORING_DIR
+from src.snowflake_connector import _is_write_query, get_snowflake_connector
+
+PUBLICATION_DECISION_PATH = PUBLISHED_MONITORING_DIR / "publication_decision.json"
+SCHEMA_CONTRACT_RESULTS_PATH = Path("data/curated/quality/schema_contract_results.csv")
+PUBLISHED_MONITORING_RESULTS_PATH = (
+    PUBLISHED_MONITORING_DIR / "published_layer_monitoring.csv"
+)
+
+app = FastAPI(title="Governed Analytics Platform API", version="1.0.0")
+
+
+_AUTH_BEARER = HTTPBearer(auto_error=False)
+
+
+def _require_api_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_AUTH_BEARER),
+) -> None:
+    expected = os.getenv("GAP_API_BEARER_TOKEN", "")
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API authentication is enabled but GAP_API_BEARER_TOKEN is not configured.",
+        )
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unsupported authentication scheme.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not secrets.compare_digest(credentials.credentials, expected):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid credentials.",
+        )
+
+
+def _load_publication_decision(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {}
+
+
+def _schema_contract_status(path: Path) -> str:
+    if not path.exists():
+        return "unknown"
+    try:
+        checks_df = pd.read_csv(path)
+    except Exception:
+        return "unknown"
+    if checks_df.empty or "status" not in checks_df.columns:
+        return "unknown"
+    has_failures = checks_df["status"].astype(str).str.upper().eq("FAIL").any()
+    return "failed" if has_failures else "passed"
+
+
+def _freshness_status(path: Path) -> str:
+    if not path.exists():
+        return "unknown"
+    try:
+        checks_df = pd.read_csv(path)
+    except Exception:
+        return "unknown"
+    if checks_df.empty or "check_name" not in checks_df.columns:
+        return "unknown"
+    freshness_rows = checks_df[
+        checks_df["check_name"].astype(str) == "published_file_freshness_hours"
+    ]
+    if freshness_rows.empty:
+        return "unknown"
+    row = freshness_rows.iloc[-1]
+    status = str(row.get("status", "")).upper()
+    if status == "PASS":
+        return "fresh"
+    metric_value = pd.to_numeric(row.get("metric_value"), errors="coerce")
+    threshold = pd.to_numeric(row.get("threshold"), errors="coerce")
+    if (
+        pd.notna(metric_value)
+        and pd.notna(threshold)
+        and float(metric_value) <= float(threshold) * 1.5
+    ):
+        return "warning"
+    return "stale"
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/governance/status", dependencies=[Depends(_require_api_auth)])
+def governance_status() -> dict[str, Any]:
+    decision = _load_publication_decision(PUBLICATION_DECISION_PATH)
+    return {
+        "dataset": decision.get("dataset", "fact_orders_dashboard"),
+        "publication_status": decision.get("status", "unknown"),
+        "data_quality_score": int(decision.get("quality_score", 0)),
+        "privacy_risk_score": int(decision.get("privacy_risk_score", 0)),
+        "failed_checks": int(decision.get("failed_checks", 0)),
+        "schema_contract_status": _schema_contract_status(SCHEMA_CONTRACT_RESULTS_PATH),
+        "freshness_status": _freshness_status(PUBLISHED_MONITORING_RESULTS_PATH),
+        "decision_reason": decision.get(
+            "decision_reason", "No decision artifact found."
+        ),
+        "timestamp_utc": decision.get(
+            "timestamp_utc", datetime.now(timezone.utc).isoformat()
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Snowflake endpoints
+# ---------------------------------------------------------------------------
+
+
+class _QueryRequest(BaseModel):
+    sql: str
+
+
+@app.get("/api/v1/snowflake/health", dependencies=[Depends(_require_api_auth)])
+def snowflake_health() -> dict[str, Any]:
+    connector = get_snowflake_connector()
+    result = connector.health_check()
+    connector.close()
+    return result
+
+
+@app.get("/api/v1/snowflake/tables", dependencies=[Depends(_require_api_auth)])
+def snowflake_tables() -> list[dict[str, str]]:
+    with get_snowflake_connector() as connector:
+        return connector.list_tables()
+
+
+@app.post("/api/v1/snowflake/query", dependencies=[Depends(_require_api_auth)])
+def snowflake_query(request: _QueryRequest) -> dict[str, Any]:
+    if _is_write_query(request.sql):
+        raise HTTPException(status_code=400, detail="Only SELECT queries are allowed.")
+    with get_snowflake_connector() as connector:
+        df = connector.query(request.sql)
+    return {
+        "columns": list(df.columns),
+        "rows": df.to_dict(orient="records"),
+        "row_count": len(df),
+    }
