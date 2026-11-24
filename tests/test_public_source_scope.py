@@ -4,7 +4,13 @@ import json
 import pytest
 
 from scripts.build_public_distribution import _selection, public_snapshot
-from src.repository_publication import INVENTORY, PUBLIC_POLICY, snapshot_problems
+from src.repository_publication import (
+    INVENTORY,
+    PUBLIC_AUTHORIZATIONS,
+    PUBLIC_POLICY,
+    PUBLIC_REVOCATIONS,
+    snapshot_problems,
+)
 
 
 def source_files():
@@ -189,3 +195,76 @@ def test_preview_lists_missing_grants_and_builder_keeps_blocking():
     assert selected["README.md"] == files[pending[0]]
     with pytest.raises(ValueError, match="Documentation authorization missing"):
         public_snapshot(files)
+
+
+PUBLIC_DEMO = "data/samples/gap_public_demo_synthetic_v1.parquet"
+
+
+@pytest.fixture
+def public_repository_files():
+    content = b"synthetic demo fixture"
+    grant = {
+        "file": PUBLIC_DEMO,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "audience": "public",
+        "purpose": "synthetic_demo_preview",
+        "status": "Approved",
+        "publication_authorized": True,
+    }
+    return {
+        PUBLIC_DEMO: content,
+        PUBLIC_POLICY: json.dumps(
+            {"version": 1, "denied_fingerprints": ["a" * 64]}
+        ).encode(),
+        PUBLIC_AUTHORIZATIONS: json.dumps({"authorizations": [grant]}).encode(),
+        PUBLIC_REVOCATIONS: source_files()[PUBLIC_REVOCATIONS],
+    }
+
+
+@pytest.mark.parametrize("field", ["revoked_artifacts", "revoked_sha256"])
+def test_repository_publication_blocks_revoked_demo(public_repository_files, field):
+    files = public_repository_files
+    modes = dict.fromkeys(files, "100644")
+    assert snapshot_problems(files, modes) == []
+    policy = json.loads(files[PUBLIC_REVOCATIONS])
+    policy[field] = [
+        PUBLIC_DEMO
+        if field == "revoked_artifacts"
+        else hashlib.sha256(files[PUBLIC_DEMO]).hexdigest()
+    ]
+    files[PUBLIC_REVOCATIONS] = json.dumps(policy).encode()
+
+    assert snapshot_problems(files, modes) == [
+        f"Revoked public artifact: {PUBLIC_DEMO}"
+    ]
+
+
+@pytest.mark.parametrize("policy", [None, b"{", b'{"version":1,"revoked_sha256":[]}'])
+def test_repository_publication_requires_valid_revocation_policy(
+    public_repository_files, policy
+):
+    files = public_repository_files
+    if policy is None:
+        del files[PUBLIC_REVOCATIONS]
+    else:
+        files[PUBLIC_REVOCATIONS] = policy
+
+    assert snapshot_problems(files, dict.fromkeys(files, "100644")) == [
+        "Public revocation policy missing, invalid or revoked."
+    ]
+
+
+@pytest.mark.parametrize(
+    "field,value", [("audience", "private"), ("purpose", "internal_only")]
+)
+def test_repository_publication_requires_public_demo_scope(
+    public_repository_files, field, value
+):
+    files = public_repository_files
+    registry = json.loads(files[PUBLIC_AUTHORIZATIONS])
+    registry["authorizations"][0][field] = value
+    files[PUBLIC_AUTHORIZATIONS] = json.dumps(registry).encode()
+
+    assert snapshot_problems(files, dict.fromkeys(files, "100644")) == [
+        f"Public distribution requires authorization: {PUBLIC_DEMO}"
+    ]

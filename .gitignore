@@ -6,6 +6,8 @@ pytest-cache-files-*/
 .ruff_cache/
 .coverage
 coverage.xml
+coverage-app.xml
+coverage-src.xml
 htmlcov/
 *.pyc
 *.pyo
@@ -79,6 +81,7 @@ data/external/*
 !/data/**/
 !/data/**/.gitkeep
 !/data/README.md
+!/data/samples/gap_public_demo_synthetic_v1.parquet
 !/data/published/monitoring/publication_decision.json
 /powerbi/*.csv
 /powerbi/*.png

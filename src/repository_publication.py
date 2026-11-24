@@ -14,9 +14,41 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INVENTORY = "config/distribution_inventory.json"
 PUBLIC_POLICY = "config/public_distribution_policy.json"
+PUBLIC_REVOCATIONS = "config/public_revocations.json"
+
+PUBLIC_AUTHORIZATIONS = "config/public_distribution_authorizations.json"
+
+def _public_distribution_authorized(files: dict[str, bytes], name: str, digest: str) -> bool:
+    try:
+        payload = json.loads(files[PUBLIC_AUTHORIZATIONS])
+        authorizations = payload.get("authorizations", [])
+        revocations = payload.get("revocations", [])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    if any(
+        isinstance(item, dict)
+        and item.get("file") == name
+        and item.get("active") is True
+        for item in revocations
+    ):
+        return False
+
+    return any(
+        isinstance(item, dict)
+        and item.get("file") == name
+        and item.get("sha256") == digest
+        and item.get("audience") == "public"
+        and item.get("purpose") == "synthetic_demo_preview"
+        and item.get("status") == "Approved"
+        and item.get("publication_authorized") is True
+        for item in authorizations
+    )
+
 SAFE_DATA = {
     "data/README.md",
     "data/published/monitoring/publication_decision.json",
+    "data/samples/gap_public_demo_synthetic_v1.parquet",
 }
 BLOCKED_SUFFIXES = {
     ".csv",
@@ -336,7 +368,10 @@ def sanitized_distribution_policy(policy: dict) -> bytes:
 def snapshot_problems(
     files: dict[str, bytes], modes: dict[str, str], *, policy: dict | None = None
 ) -> list[str]:
+    from src.public_revocation import policy_allows
+
     fingerprints: set[str] = set()
+    revocation_policy = None
     public_mode = INVENTORY not in files
     if public_mode:
         try:
@@ -355,6 +390,11 @@ def snapshot_problems(
             fingerprints.update(entries)
         except (KeyError, ValueError, TypeError):
             return ["Public distribution policy missing or invalid."]
+        revocation_policy = files.get(PUBLIC_REVOCATIONS)
+        if revocation_policy is None or not policy_allows(
+            revocation_policy, revocation_policy, artifact=PUBLIC_REVOCATIONS
+        ):
+            return ["Public revocation policy missing, invalid or revoked."]
         policy = {"excluded_files": [], "restricted_git_blobs": []}
     elif policy is None:
         policy = json.loads(files[INVENTORY])
@@ -383,11 +423,11 @@ def snapshot_problems(
             or _fingerprint("path", lower) in fingerprints
             or (
                 lower.startswith("data/")
-                and (public_mode or name not in SAFE_DATA)
+                and name not in SAFE_DATA
                 and path.name != ".gitkeep"
             )
             or (lower.startswith("logs/") and name != "logs/.gitkeep")
-            or path.suffix.lower() in BLOCKED_SUFFIXES
+            or (path.suffix.lower() in BLOCKED_SUFFIXES and name not in SAFE_DATA)
             or lower.startswith(("dist/", ".git/", ".venv/", "docs/security/"))
             or path.name.casefold() == "secrets.toml"
             or (path.name.startswith(".env") and path.name != ".env.example")
@@ -395,6 +435,11 @@ def snapshot_problems(
             problems.append(f"Unauthorized distribution path: {name}")
             continue
         content = files[name]
+        if revocation_policy is not None and not policy_allows(
+            revocation_policy, content, artifact=name
+        ):
+            problems.append(f"Revoked public artifact: {name}")
+            continue
         if b'"olist_rejection_journal"' in content:
             try:
                 document = json.loads(content)
@@ -407,12 +452,16 @@ def snapshot_problems(
                 problems.append(f"Restricted quarantine journal: {name}")
                 continue
         digest = hashlib.sha256(content).hexdigest()
+        if public_mode and name in SAFE_DATA and name != "data/README.md":
+            if not _public_distribution_authorized(files, name, digest):
+                problems.append(f"Public distribution requires authorization: {name}")
         oid = hashlib.sha1(
             b"blob " + str(len(content)).encode() + b"\0" + content
         ).hexdigest()
         reviewed_digest = policy.get("metadata_sha256", {}).get(name)
         if (
-            name in SAFE_DATA
+            not public_mode
+            and name in SAFE_DATA
             and name != "data/README.md"
             and reviewed_digest != digest
             and policy.get("metadata_git_blobs", {}).get(name) != oid
@@ -467,4 +516,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     raise SystemExit(main())
