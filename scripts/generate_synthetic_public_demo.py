@@ -117,4 +117,9 @@ if __name__ == "__main__":
         raise SystemExit("Refusing to overwrite an existing fixture.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     generate().to_parquet(args.output, index=False)
+    content = args.output.read_bytes()
+    digest = hashlib.sha256(content).hexdigest()
+    size = args.output.stat().st_size
     print("Synthetic candidate generated; public authorization remains Needs Review.")
+    print(f"SHA-256: {digest}")
+    print(f"Bytes: {size}")

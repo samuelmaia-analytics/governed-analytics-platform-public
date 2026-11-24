@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pandas as pd
@@ -157,6 +158,12 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
 
     class FakeStreamlit:
         @staticmethod
+        @contextmanager
+        def spinner(_value: str):  # type: ignore[no-untyped-def]
+            calls.append("spinner")
+            yield
+
+        @staticmethod
         def title(_value: str) -> None:
             calls.append("title")
 
@@ -191,6 +198,7 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "build_locale_selector", lambda: "pt-BR")
     monkeypatch.setattr(main_module, "inject_base_styles", lambda: None)
     monkeypatch.setattr(main_module, "build_context", lambda _locale: context)
+    monkeypatch.setattr(main_module, "_ensure_semantic_slices", lambda _locale: None)
     monkeypatch.setattr(
         main_module, "_render_executive_page", lambda *_args, **_kwargs: None
     )
@@ -294,3 +302,56 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
     technical_page.fn()
     assert eda_calls == [(context, "pt-BR")]
     assert "navigation_run" in calls
+
+
+def test_ensure_semantic_slices_returns_when_ready(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "_semantic_slices_ready", lambda: True)
+
+    import src.semantic_layer as semantic_layer
+
+    monkeypatch.setattr(
+        semantic_layer,
+        "run_semantic_layer",
+        lambda: pytest.fail("Semantic layer must not run when slices are ready"),
+    )
+
+    main_module._ensure_semantic_slices("pt-BR")
+
+
+def test_ensure_semantic_slices_handles_missing_data(monkeypatch) -> None:
+    sidebar_calls: list[tuple[str, str]] = []
+    spinner_calls: list[str] = []
+
+    class FakeSidebar:
+        @staticmethod
+        def warning(message: str) -> None:
+            sidebar_calls.append(("warning", message))
+
+        @staticmethod
+        def caption(message: str) -> None:
+            sidebar_calls.append(("caption", message))
+
+    class FakeStreamlit:
+        sidebar = FakeSidebar()
+
+        @staticmethod
+        @contextmanager
+        def spinner(_value: str):  # type: ignore[no-untyped-def]
+            spinner_calls.append(_value)
+            yield
+
+    monkeypatch.setattr(main_module, "st", FakeStreamlit())
+    monkeypatch.setattr(main_module, "_semantic_slices_ready", lambda: False)
+
+    import src.semantic_layer as semantic_layer
+
+    def boom() -> None:
+        raise FileNotFoundError("missing dataset")
+
+    monkeypatch.setattr(semantic_layer, "run_semantic_layer", boom)
+
+    main_module._ensure_semantic_slices("pt-BR")
+
+    assert spinner_calls, "spinner should be used while attempting materialization"
+    assert any(kind == "warning" for kind, _ in sidebar_calls)
+    assert any(kind == "caption" for kind, _ in sidebar_calls)

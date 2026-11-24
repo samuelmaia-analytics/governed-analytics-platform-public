@@ -18,12 +18,16 @@ from src.cloud_reference import summarize_cost_controls
 from src.config import PUBLISHED_MONITORING_DIR
 from src.data_lake_layers import summarize_layer_status
 from src.governance_types import DataQualityResult, PrivacyRiskResult
+from src.public_mode import is_public_visitor_mode
 
 GOVERNANCE_HISTORY_PATH = PUBLISHED_MONITORING_DIR / "governance_history.csv"
 DEFAULT_PUBLISHED_DATASET = Path("data/published/dashboard/fact_orders_dashboard.csv")
 
 
 def _load_previous_snapshot() -> dict[str, float] | None:
+    if is_public_visitor_mode():
+        return None
+
     if not GOVERNANCE_HISTORY_PATH.exists():
         return None
     try:

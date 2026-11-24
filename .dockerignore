@@ -1,0 +1,18 @@
+.git/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+logs/
+
+# data is generated / mounted per-environment
+/data/
+
+# tests not needed for runtime image
+/tests/
+
+# local-only configs
+.env
+.env.*

@@ -12,12 +12,14 @@ import os
 import re
 from pathlib import Path, PurePosixPath
 
+from src.public_mode import is_public_visitor_mode
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def public_downloads_enabled() -> bool:
     """Do not issue reusable Streamlit media URLs in the public container."""
-    return os.environ.get("GAP_PUBLIC_DEMO_MODE", "").lower() != "true"
+    return not is_public_visitor_mode()
 
 
 def content_not_revoked(

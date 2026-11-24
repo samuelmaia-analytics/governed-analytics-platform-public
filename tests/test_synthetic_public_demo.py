@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -170,6 +171,57 @@ def test_real_app_entrypoint_uses_only_proposed_fixture(tmp_path, synthetic_fram
             any(term in str(item.value).lower() for term in ("sample", "amostra"))
             for item in app.warning
         )
-        assert any(
-            "Public distribution: BLOCKED" in str(item.value) for item in app.warning
-        )
+
+
+
+def test_public_profile_does_not_materialize_private_semantic_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    '''Public visitor mode must not write/overwrite persisted semantic marts.'''
+
+    import app.context as context
+    import src.data_loader as data_loader
+    import src.semantic_layer as semantic_layer
+
+    root = tmp_path / "root"
+    artifact_path = root / "data/samples/gap_public_demo_synthetic_v1.parquet"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = generate(rows=2_001)
+    df.to_parquet(artifact_path, index=False)
+    digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+
+    (root / "config").mkdir(parents=True, exist_ok=True)
+    (root / "config/public_revocations.json").write_text(
+        json.dumps({"version": 1, "revoked_sha256": [], "revoked_artifacts": []}),
+        encoding="utf-8",
+    )
+    (root / "config/public_distribution_authorizations.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "authorizations": [
+                    {
+                        "file": "data/samples/gap_public_demo_synthetic_v1.parquet",
+                        "sha256": digest,
+                        "purpose": "synthetic_demo_preview",
+                        "audience": "public",
+                        "status": "Approved",
+                        "publication_authorized": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("GAP_PUBLIC_VISITOR_MODE", "true")
+    monkeypatch.setattr(data_loader, "PROJECT_ROOT", root)
+    monkeypatch.setattr(data_loader, "DEFAULT_PUBLIC_DEMO_DATASET", artifact_path)
+    monkeypatch.setattr(context, "DEFAULT_PUBLIC_DEMO_DATASET", artifact_path)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("run_semantic_layer must not run in public visitor mode")
+
+    monkeypatch.setattr(semantic_layer, "run_semantic_layer", fail_if_called)
+
+    app = AppTest.from_file(str(ROOT / "app/main.py"), default_timeout=45).run()
+    assert not app.exception

@@ -7,6 +7,7 @@ import plotly.express as px
 import streamlit as st
 
 from app.i18n import LOCALE_EN_US, Locale
+from src.public_mode import is_public_visitor_mode
 
 GENAI_FEATURES_PATH = Path("data/curated/genai/product_text_features.csv")
 
@@ -77,6 +78,9 @@ def _load_genai_features() -> pd.DataFrame:
 
 
 def render_genai_insights(locale: Locale) -> None:
+    if is_public_visitor_mode():
+        st.info("GenAI inputs are not available in the public visitor profile." if locale == LOCALE_EN_US else "Recursos de GenAI não estão disponíveis no perfil público.")
+        return
     is_en = locale == LOCALE_EN_US
     st.title("Generative AI Experiment" if is_en else "Experimento de IA Generativa")
     st.markdown(

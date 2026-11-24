@@ -7,6 +7,8 @@ import plotly.express as px
 import streamlit as st
 
 from app.i18n import LOCALE_EN_US, Locale
+from src.public_mode import is_public_visitor_mode
+from src.semantic_layer import build_cohort_slice
 
 COHORT_SLICE_PATH = Path("data/published/semantic/cohort_slice.csv")
 
@@ -43,7 +45,7 @@ def _format_month_offset(value: int | float) -> str:
     return f"Mês {int(float(value))}"
 
 
-def render_cohort_retention(locale: Locale) -> None:
+def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> None:
     is_en = locale == LOCALE_EN_US
     st.title("Retenção de Clientes")
     st.subheader(
@@ -66,7 +68,8 @@ def render_cohort_retention(locale: Locale) -> None:
     )
     st.markdown("**Retenção = clientes no mês relativo ÷ clientes do Mês 0 × 100**")
 
-    cohort_df = _load_cohort_slice()
+    cohort_df = build_cohort_slice(df) if is_public_visitor_mode() and df is not None and not df.empty else _load_cohort_slice()
+
     required = {
         "purchase_cohort_month",
         "cohort_order_month_number",
