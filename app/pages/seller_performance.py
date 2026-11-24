@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from app.components.analytics import filtered_seller_order_count, valid_item_grain
 from app.i18n import Locale
 from src.public_mode import is_public_visitor_mode
 from src.semantic_layer import build_seller_slice
@@ -137,7 +138,11 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         "logístico e contribuição estimada."
     )
 
-    if is_public_visitor_mode():
+    public_mode = is_public_visitor_mode()
+    if public_mode:
+        if df is not None and not df.empty and not valid_item_grain(df):
+            st.warning("Desempenho indisponível: o grão pedido × item não é válido.")
+            return
         seller_df = (
             build_seller_slice(df)
             if df is not None and not df.empty
@@ -188,6 +193,9 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     order_count = int(
         pd.to_numeric(filtered["seller_order_count"], errors="coerce").fillna(0).sum()
     )
+    if public_mode and df is not None:
+        order_count = filtered_seller_order_count(df, filtered)
+
     avg_delay_rate = (
         float(pd.to_numeric(filtered["delay_rate"], errors="coerce").mean()) * 100
     )
@@ -197,7 +205,10 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Sellers ativos", _format_integer(seller_count))
-    m2.metric("Pedidos", _format_integer(order_count))
+    m2.metric(
+        "Pedidos únicos" if public_mode else "Pedidos por seller (soma)",
+        _format_integer(order_count),
+    )
     m3.metric("Taxa média de atraso", f"{_format_decimal(avg_delay_rate, 1)}%")
     m4.metric(
         "Tempo médio de entrega",
@@ -205,6 +216,8 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     )
 
     st.markdown("### Leitura executiva")
+    if not public_mode:
+        st.caption("A soma por seller pode contar o mesmo pedido em mais de um seller.")
     st.markdown(
         f"- A seleção atual reúne **{_format_integer(seller_count)} sellers** e "
         f"**{_format_integer(order_count)} pedidos**.\n"
@@ -271,17 +284,39 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         st.plotly_chart(fig_sla, width="stretch")
 
     ranking = filtered.copy()
-    ranking["estimated_revenue"] = pd.to_numeric(
-        ranking["avg_ticket"], errors="coerce"
-    ).fillna(0) * pd.to_numeric(ranking["seller_order_count"], errors="coerce").fillna(
-        0
-    )
+    exact_gmv = "gross_item_value" in ranking
+    if exact_gmv:
+        ranking["estimated_revenue"] = ranking["gross_item_value"]
+    else:
+        ranking["estimated_revenue"] = pd.to_numeric(
+            ranking["avg_ticket"], errors="coerce"
+        ).fillna(0) * pd.to_numeric(
+            ranking["seller_order_count"], errors="coerce"
+        ).fillna(0)
     ranking = ranking.sort_values("estimated_revenue", ascending=False).head(20)
 
     technical_ranking = ranking[_RANKING_COLUMNS].copy()
     executive_ranking = _build_executive_ranking(technical_ranking)
 
-    st.markdown("### Top Sellers por Receita Estimada")
+    if exact_gmv:
+        technical_ranking = technical_ranking.rename(
+            columns={"estimated_revenue": "gross_item_value"}
+        )
+        executive_ranking = executive_ranking.rename(
+            columns={
+                "Receita estimada": "GMV (R$)",
+                "Ticket médio": "Valor médio por item",
+            }
+        )
+        st.markdown("### Top sellers por GMV")
+        st.caption(
+            "GMV = soma dos valores dos itens e do frete. Atraso e entrega são médias por grupo de seller."
+        )
+    else:
+        st.markdown("### Top Sellers por Receita Estimada")
+        st.caption(
+            "Estimativa do recorte histórico: valor médio por item × pedidos por seller."
+        )
     st.dataframe(
         executive_ranking,
         width="stretch",

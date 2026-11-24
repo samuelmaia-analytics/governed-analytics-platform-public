@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from app.components.analytics import cohort_retention, valid_item_grain
 from app.i18n import LOCALE_EN_US, Locale
 from src.public_mode import is_public_visitor_mode
 from src.semantic_layer import build_category_slice, build_cohort_slice
@@ -31,11 +32,11 @@ def _shorten_seller_label(value: object) -> str:
 
 
 def _render_executive_kpis(df: pd.DataFrame) -> None:
-    revenue = (
-        float(pd.to_numeric(df["total_item_value"], errors="coerce").sum())
-        if "total_item_value" in df.columns
-        else None
+    amounts = pd.to_numeric(
+        df.get("total_item_value", pd.Series(dtype=float)), errors="coerce"
     )
+    total = amounts.sum(min_count=1)
+    revenue = float(total) if pd.notna(total) else None
     order_count = (
         int(df["order_id"].nunique(dropna=True)) if "order_id" in df.columns else None
     )
@@ -52,14 +53,14 @@ def _render_executive_kpis(df: pd.DataFrame) -> None:
 
     revenue_col, orders_col, ticket_col, sellers_col = st.columns([1.5, 1, 1, 1])
     revenue_col.metric(
-        "Receita total",
+        "GMV (itens + frete)",
         _format_brl(revenue) if revenue is not None else "Não disponível",
     )
     orders_col.metric(
         "Pedidos", f"{order_count:,}" if order_count is not None else "Não disponível"
     )
     ticket_col.metric(
-        "Ticket médio",
+        "Ticket por pedido",
         _format_brl(average_ticket) if average_ticket is not None else "Não disponível",
     )
     sellers_col.metric(
@@ -102,18 +103,23 @@ def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
         return
 
     working_df = df.copy()
+    if "order_purchase_timestamp" in working_df:
+        dates = pd.to_datetime(working_df["order_purchase_timestamp"], errors="coerce")
+        working_df["order_year_month"] = dates.dt.to_period("M").dt.strftime("%Y-%m")
+        first, last = dates.min(), dates.max()
+        if pd.notna(first) and pd.notna(last):
+            st.caption(f"Datas observadas: {first:%d/%m/%Y} a {last:%d/%m/%Y}.")
+            if not first.is_month_start or not last.is_month_end:
+                st.caption(
+                    "A série inclui mês de borda parcial; compare períodos equivalentes."
+                )
     if "order_year_month" not in working_df.columns:
         if {"order_year", "order_month"}.issubset(working_df.columns):
             year = pd.to_numeric(working_df["order_year"], errors="coerce")
             month = pd.to_numeric(working_df["order_month"], errors="coerce")
-            working_df["order_year_month"] = (
-                year.fillna(0).astype(int).astype(str)
-                + "-"
-                + month.fillna(0).astype(int).astype(str).str.zfill(2)
-            )
-        elif "order_purchase_timestamp" in working_df.columns:
-            ts = pd.to_datetime(working_df["order_purchase_timestamp"], errors="coerce")
-            working_df["order_year_month"] = ts.dt.to_period("M").astype(str)
+            working_df["order_year_month"] = pd.to_datetime(
+                {"year": year, "month": month, "day": 1}, errors="coerce"
+            ).dt.strftime("%Y-%m")
         else:
             st.info(
                 "Colunas temporais necessárias não encontradas para série mensal."
@@ -122,9 +128,24 @@ def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
             )
             return
 
+    valid_months = (
+        working_df["order_year_month"]
+        .astype("string")
+        .str.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", na=False)
+    )
+    missing_months = int((~valid_months).sum())
+    if missing_months:
+        st.caption(
+            f"{missing_months:,} itens sem mês válido foram omitidos da série mensal."
+        )
+    if not valid_months.any():
+        st.info("Série mensal indisponível.")
+        return
+
     monthly = (
-        working_df.groupby("order_year_month", dropna=False)["total_item_value"]
-        .sum()
+        working_df.loc[valid_months]
+        .groupby("order_year_month")["total_item_value"]
+        .sum(min_count=1)
         .reset_index()
     )
     monthly = monthly.rename(columns={"total_item_value": "revenue"})
@@ -224,49 +245,47 @@ def _render_cohort_ticket_and_retention(
         )
         return
 
-    cohort_df = cohort_slice.copy()
-    cohort_df["purchase_cohort_month"] = cohort_df["purchase_cohort_month"].astype(str)
-    cohort_df["cohort_order_month_number"] = pd.to_numeric(
-        cohort_df["cohort_order_month_number"], errors="coerce"
-    ).fillna(0)
+    cohort_df = cohort_retention(cohort_slice)
+    ticket_column = (
+        "avg_order_ticket" if "avg_order_ticket" in cohort_df else "avg_ticket"
+    )
+    ticket_label = (
+        "Ticket por pedido"
+        if ticket_column == "avg_order_ticket"
+        else "Valor médio por item"
+    )
+    if cohort_df.empty:
+        st.info("Células de coorte indisponíveis.")
+        return
 
     st.caption(
         "A análise de cohort mostra como ticket médio e retenção evoluem ao "
         "longo dos meses após a primeira compra."
     )
 
-    ticket_pivot = cohort_df.pivot_table(
+    ticket_pivot = cohort_df.pivot(
         index="purchase_cohort_month",
         columns="cohort_order_month_number",
-        values="avg_ticket",
-        aggfunc="mean",
+        values=ticket_column,
     )
     fig_ticket = px.imshow(
         ticket_pivot,
         text_auto=".1f",
         aspect="auto",
         color_continuous_scale="Blues",
-        title="Ticket médio por cohort",
+        title=f"{ticket_label} por cohort",
         labels={
             "x": "Meses desde a primeira compra",
             "y": "Cohort de aquisição",
-            "color": "Ticket médio",
+            "color": f"{ticket_label} (R$)",
         },
     )
     st.plotly_chart(fig_ticket, width="stretch")
 
-    baseline = cohort_df[cohort_df["cohort_order_month_number"] == 0][
-        ["purchase_cohort_month", "customers"]
-    ].rename(columns={"customers": "baseline_customers"})
-    retention = cohort_df.merge(baseline, on="purchase_cohort_month", how="left")
-    retention["retention_rate"] = (
-        retention["customers"] / retention["baseline_customers"].replace(0, pd.NA)
-    ) * 100
-    retention_pivot = retention.pivot_table(
+    retention_pivot = cohort_df.pivot(
         index="purchase_cohort_month",
         columns="cohort_order_month_number",
         values="retention_rate",
-        aggfunc="mean",
     )
     fig_retention = px.imshow(
         retention_pivot,
@@ -274,6 +293,7 @@ def _render_cohort_ticket_and_retention(
         aspect="auto",
         color_continuous_scale="Teal",
         title="Retenção por cohort (%)",
+        range_color=(0, 100),
         labels={
             "x": "Meses desde a primeira compra",
             "y": "Cohort de aquisição",
@@ -293,7 +313,7 @@ def _render_top_sellers(df: pd.DataFrame, locale: Locale) -> None:
         )
         return
     sellers = (
-        df.groupby("seller_key", dropna=False)["total_item_value"]
+        df.groupby("seller_key")["total_item_value"]
         .sum()
         .reset_index()
         .sort_values("total_item_value", ascending=False)
@@ -337,6 +357,9 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
             if is_en
             else "Dados sintéticos · Valores em reais (BRL)"
         )
+    if public_mode and not valid_item_grain(df):
+        st.warning("Análise indisponível: o grão pedido × item não é válido.")
+        return
     if df.empty and public_mode:
         st.info(
             "Revenue data is unavailable."
@@ -344,6 +367,10 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
             else "Dados de receita indisponíveis."
         )
         return
+    st.caption(
+        "GMV = valor dos itens + frete, nos estados presentes na fonte. "
+        "Ticket por pedido = GMV ÷ pedidos distintos."
+    )
     _render_executive_kpis(df)
 
     category_slice = (

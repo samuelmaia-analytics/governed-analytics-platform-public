@@ -54,15 +54,14 @@ def load_published_table() -> pd.DataFrame:
         source_path = Path(configured_source)
         if not source_path.exists() or source_path.is_symlink():
             raise FileNotFoundError(
-                "Semantic layer source not found (or symlinked): "
-                f"{source_path}"
+                f"Semantic layer source not found (or symlinked): {source_path}"
             )
         return pd.read_parquet(source_path)
-
 
     raise FileNotFoundError(
         f"Camada publicada nao encontrada para expansao semantica: {PUBLISHED_SOURCE_PATH}"
     )
+
 
 def build_logistics_slice(df: pd.DataFrame) -> pd.DataFrame:
     logistics = (
@@ -86,11 +85,17 @@ def build_logistics_slice(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_seller_slice(df: pd.DataFrame) -> pd.DataFrame:
+    keys = ["seller_key", "seller_state", "seller_volume_tier"]
     seller = (
-        df.groupby(["seller_key", "seller_state", "seller_volume_tier"], dropna=False)
+        df.dropna(subset=["seller_key"])
+        .groupby(keys, dropna=False)
         .agg(
             total_items=("order_item_id", "count"),
-            seller_order_count=("seller_order_count", "max"),
+            seller_order_count=("order_id", "nunique"),
+            gross_item_value=(
+                "total_item_value",
+                lambda amounts: amounts.sum(min_count=1),
+            ),
             avg_ticket=("total_item_value", "mean"),
             avg_delivery_time_days=("seller_avg_delivery_days", "max"),
             delay_rate=("seller_delay_rate", "max"),
@@ -104,20 +109,60 @@ def build_seller_slice(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_cohort_slice(df: pd.DataFrame) -> pd.DataFrame:
+    month_column = "purchase_cohort_month"
+    offset_column = "cohort_order_month_number"
+    keys = [month_column, offset_column]
+    cohort_month = pd.to_datetime(df[month_column], format="%Y-%m", errors="coerce")
+    offset = pd.to_numeric(df[offset_column], errors="coerce")
+    valid = cohort_month.notna() & offset.ge(0) & offset.mod(1).eq(0)
+    dates = None
+    if "order_purchase_timestamp" in df:
+        dates = pd.to_datetime(df["order_purchase_timestamp"], errors="coerce")
+        actual_offset = (
+            (dates.dt.year - cohort_month.dt.year) * 12
+            + dates.dt.month
+            - cohort_month.dt.month
+        )
+        valid &= dates.notna() & actual_offset.eq(offset)
+    members = df.loc[valid].dropna(subset=["customer_unique_id", "order_id"])
+    months_per_customer = members.groupby("customer_unique_id")[month_column].nunique()
+    stable = members["customer_unique_id"].map(months_per_customer).eq(1)
+    members = members.loc[stable].assign(
+        **{offset_column: offset.loc[members.index].loc[stable]}
+    )
+    population = members.loc[members[offset_column].eq(0), "customer_unique_id"]
+    members = members.loc[members["customer_unique_id"].isin(population)]
     cohort = (
-        df.groupby(["purchase_cohort_month", "cohort_order_month_number"], dropna=False)
+        members.groupby(keys)
         .agg(
             customers=("customer_unique_id", "nunique"),
             orders=("order_id", "nunique"),
             items=("order_item_id", "count"),
             avg_ticket=("total_item_value", "mean"),
+            gross_item_value=(
+                "total_item_value",
+                lambda amounts: amounts.sum(min_count=1),
+            ),
             delayed_rate=("is_delayed", "mean"),
         )
         .reset_index()
     )
-    return cohort.sort_values(
-        ["purchase_cohort_month", "cohort_order_month_number"]
-    ).reset_index(drop=True)
+    cohort["avg_order_ticket"] = cohort["gross_item_value"].div(
+        cohort["orders"].where(cohort["orders"].gt(0))
+    )
+    if dates is not None:
+        latest = dates.max()
+        first = dates.min()
+        acquisition = pd.PeriodIndex(cohort[month_column], freq="M")
+        observed = acquisition + cohort[offset_column].to_numpy(dtype="int64")
+        cohort["retention_observable"] = (
+            pd.notna(latest)
+            and pd.notna(first)
+            and (observed.start_time.normalize() >= first.normalize())
+            & (observed.end_time.normalize() <= latest.normalize())
+            & (acquisition.start_time.normalize() >= first.normalize())
+        )
+    return cohort.sort_values(keys).reset_index(drop=True)
 
 
 def build_category_slice(df: pd.DataFrame) -> pd.DataFrame:
@@ -304,9 +349,7 @@ def run_semantic_layer(
             encoding="utf-8",
         )
 
-    LOGGER.info(
-        "Camada semantica expandida materializada em %s", resolved_output
-    )
+    LOGGER.info("Camada semantica expandida materializada em %s", resolved_output)
     return SemanticArtifacts(
         logistics_path=logistics_path,
         seller_path=seller_path,
