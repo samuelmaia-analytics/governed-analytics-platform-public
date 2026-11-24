@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pandas as pd
@@ -156,6 +157,12 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
             calls.append("navigation_run")
 
     class FakeStreamlit:
+        @staticmethod
+        @contextmanager
+        def spinner(_value: str):  # type: ignore[no-untyped-def]
+            calls.append("spinner")
+            yield
+
         @staticmethod
         def title(_value: str) -> None:
             calls.append("title")
