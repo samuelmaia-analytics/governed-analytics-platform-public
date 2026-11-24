@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INVENTORY = "config/distribution_inventory.json"
 PUBLIC_POLICY = "config/public_distribution_policy.json"
+PUBLIC_REVOCATIONS = "config/public_revocations.json"
 
 PUBLIC_AUTHORIZATIONS = "config/public_distribution_authorizations.json"
 
@@ -37,6 +38,8 @@ def _public_distribution_authorized(files: dict[str, bytes], name: str, digest: 
         isinstance(item, dict)
         and item.get("file") == name
         and item.get("sha256") == digest
+        and item.get("audience") == "public"
+        and item.get("purpose") == "synthetic_demo_preview"
         and item.get("status") == "Approved"
         and item.get("publication_authorized") is True
         for item in authorizations
@@ -365,7 +368,10 @@ def sanitized_distribution_policy(policy: dict) -> bytes:
 def snapshot_problems(
     files: dict[str, bytes], modes: dict[str, str], *, policy: dict | None = None
 ) -> list[str]:
+    from src.public_revocation import policy_allows
+
     fingerprints: set[str] = set()
+    revocation_policy = None
     public_mode = INVENTORY not in files
     if public_mode:
         try:
@@ -384,6 +390,11 @@ def snapshot_problems(
             fingerprints.update(entries)
         except (KeyError, ValueError, TypeError):
             return ["Public distribution policy missing or invalid."]
+        revocation_policy = files.get(PUBLIC_REVOCATIONS)
+        if revocation_policy is None or not policy_allows(
+            revocation_policy, revocation_policy, artifact=PUBLIC_REVOCATIONS
+        ):
+            return ["Public revocation policy missing, invalid or revoked."]
         policy = {"excluded_files": [], "restricted_git_blobs": []}
     elif policy is None:
         policy = json.loads(files[INVENTORY])
@@ -424,6 +435,11 @@ def snapshot_problems(
             problems.append(f"Unauthorized distribution path: {name}")
             continue
         content = files[name]
+        if revocation_policy is not None and not policy_allows(
+            revocation_policy, content, artifact=name
+        ):
+            problems.append(f"Revoked public artifact: {name}")
+            continue
         if b'"olist_rejection_journal"' in content:
             try:
                 document = json.loads(content)
@@ -500,4 +516,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     raise SystemExit(main())
