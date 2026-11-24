@@ -248,9 +248,10 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
 
     main_module.main()
 
-    assert calls.count("page") == 15
+    assert calls.count("page") == 16
     expected_routes = {
-        "Overview": "executive-overview",
+        "Visão geral": "executive-overview",
+        "Sobre o projeto": "about-gap",
         "Indicadores anal\u00edticos": "revenue-analytics",
         "Publication Gate": "publication-governance",
         "LGPD e Privacidade": "lgpd-privacy-risk",
@@ -274,21 +275,22 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
     assert registered_routes == expected_routes
     assert "eda" not in url_paths
     assert navigation_titles == [
-        "Overview",
-        "Data Quality",
-        "Contratos e Cat\u00e1logo",
-        "LGPD e Privacidade",
-        "Central de Controles",
-        "Indicadores anal\u00edticos",
+        "Visão geral",
+        "Indicadores analíticos",
         "Seller Performance",
         "Cohort Retention",
-        "An\u00e1lise Explorat\u00f3ria",
+        "Análise Exploratória",
+        "Data Quality",
+        "Contratos e Catálogo",
+        "LGPD e Privacidade",
+        "Publication Gate",
+        "Central de Controles",
+        "Evidências e rastreabilidade",
         "n8n Automation",
         "GenAI Insights",
         "Assistente RAG",
         "Snowflake Explorer",
-        "Publication Gate",
-        "Evid\u00eancias e rastreabilidade",
+        "Sobre o projeto",
     ]
     technical_page = next(
         page

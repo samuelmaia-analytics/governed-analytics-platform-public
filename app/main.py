@@ -15,11 +15,16 @@ if PROJECT_ROOT not in sys.path:
 from app.context import GovernanceAppContext, build_context  # noqa: E402
 from app.components.ui import inject_base_styles  # noqa: E402
 from app.i18n import build_locale_selector  # noqa: E402
+from app.pages.about import render_about  # noqa: E402
 from app.pages.cohort_retention import render_cohort_retention  # noqa: E402
 from app.pages.data_catalog import render_data_catalog  # noqa: E402
 from app.pages.data_quality import render_data_quality  # noqa: E402
 from app.pages.eda import render_eda  # noqa: E402
-from app.pages.executive_overview import render_executive_overview  # noqa: E402
+from app.pages.executive_overview import (  # noqa: E402
+    render_executive_hero,
+    render_executive_overview,
+    render_governed_flow,
+)
 from app.pages.genai_insights import render_genai_insights  # noqa: E402
 from app.pages.governance_assistant import render_governance_assistant  # noqa: E402
 from app.pages.governance_control_center import (  # noqa: E402
@@ -62,6 +67,7 @@ def _render_executive_page(
         quick_pages=quick_pages,
         duckdb_version=get_duckdb_version(),
         uses_persisted_governance=context.uses_persisted_governance,
+        public_gate=context.public_distribution_gate,
     )
 
 
@@ -120,10 +126,32 @@ def _render_control_center_page(context: GovernanceAppContext, locale: str) -> N
 
 
 def _render_snowflake_page(_context: GovernanceAppContext | None, locale: str) -> None:
+    if is_public_visitor_mode():
+        is_en = locale == "en-US"
+        st.title("Snowflake Integration" if is_en else "Integração Snowflake")
+        st.info(
+            "Connections and queries are unavailable in the public profile."
+            if is_en
+            else "Conexões e consultas estão indisponíveis no perfil público."
+        )
+        return
     render_snowflake_explorer(locale)
 
 
-def _render_n8n_automation_page(_context: GovernanceAppContext | None, _locale: str) -> None:
+def _render_n8n_automation_page(
+    _context: GovernanceAppContext | None, locale: str
+) -> None:
+    if is_public_visitor_mode():
+        is_en = locale == "en-US"
+        st.title("Automation and orchestration" if is_en else "Automação e Orquestração")
+        st.write(
+            "Architecture overview. n8n templates describe scheduling, pipeline execution "
+            "and failure handling. Workflow inspection and execution require a controlled environment."
+            if is_en
+            else "Visão documental. Os templates n8n descrevem agendamento, execução do pipeline "
+            "e tratamento de falhas. A inspeção e a execução dos workflows exigem um ambiente controlado."
+        )
+        return
     render_n8n_automation()
 
 
@@ -133,63 +161,26 @@ def _render_publication_governance_page(
     render_publication_governance()
 
 
-def _render_dataset_required(
-    locale: str,
-    *,
-    title: str,
-    context_error: str | None,
-) -> None:
+def _render_dataset_required(locale: str, *, title: str | None = None) -> None:
     is_en = locale == "en-US"
-    st.title(title)
-
+    if title is not None:
+        st.title(title)
     st.warning(
-        "Public visitor profile: no authorized public dataset is available."
+        "Sample unavailable for public viewing."
         if is_en
-        else "Perfil p\u00fablico de visitante: nenhum dataset p\u00fablico autorizado est\u00e1 dispon\u00edvel."
+        else "Amostra indisponível para visualização pública."
     )
     st.write(
-        (
-            "This instance does not ship with Olist data and will not load private artifacts by default. "
-            "To enable dashboards in the public profile, an explicit, byte-level authorization must be added "
-            "for the approved public fixture (and remain unrevoked)."
-        )
+        "Explore engineering and governance through the other pages in the menu."
         if is_en
-        else (
-            "Esta inst\u00e2ncia n\u00e3o distribui dados Olist e n\u00e3o carrega artefatos privados por padr\u00e3o. "
-            "Para habilitar dashboards no perfil p\u00fablico, \u00e9 necess\u00e1rio registrar uma autoriza\u00e7\u00e3o expl\u00edcita "
-            "(por bytes) para a fixture p\u00fablica aprovada (e mant\u00ea-la sem revoga\u00e7\u00e3o)."
-        )
-    )
-    st.caption(
-        (
-            "You can still review architecture, governance controls, and operational policies using the other pages."
-        )
-        if is_en
-        else (
-            "Voc\u00ea ainda pode revisar arquitetura, controles de governan\u00e7a e pol\u00edticas operacionais nas demais p\u00e1ginas."
-        )
+        else "Explore a engenharia e a governança pelas outras páginas do menu."
     )
 
-    with st.expander("Technical details" if is_en else "Detalhes t\u00e9cnicos"):
-        if context_error:
-            st.code(context_error)
-        st.markdown(
-            (
-                "**Conditions to display public dashboards:**\n\n"
-                "- Provide `data/samples/gap_public_demo_synthetic_v1.parquet`\n"
-                "- Add its SHA-256 to `config/public_distribution_authorizations.json` with status `Approved`\n"
-                "- Ensure `config/public_revocations.json` does not revoke it\n"
-                "- Keep the Publication Gate decision fail-closed"
-            )
-            if is_en
-            else (
-                "**Condi\u00e7\u00f5es para exibir dashboards p\u00fablicos:**\n\n"
-                "- Disponibilizar `data/samples/gap_public_demo_synthetic_v1.parquet`\n"
-                "- Registrar o SHA-256 em `config/public_distribution_authorizations.json` com status `Approved`\n"
-                "- Garantir que `config/public_revocations.json` n\u00e3o revogue o artefato\n"
-                "- Manter o Publication Gate em fail-closed"
-            )
-        )
+
+def _render_overview_without_data(locale: str) -> None:
+    render_executive_hero(locale, public_mode=True)
+    _render_dataset_required(locale)
+    render_governed_flow(locale)
 
 
 def _visitor_report_paths() -> dict[str, Path]:
@@ -201,6 +192,7 @@ def _visitor_report_paths() -> dict[str, Path]:
         "semantic_layer": root / "docs/architecture/semantic_layer.md",
         "data_contracts": root / "docs/data_contracts.md",
     }
+
 
 def _semantic_slices_ready() -> bool:
     if is_public_visitor_mode():
@@ -221,7 +213,9 @@ def _ensure_semantic_slices(locale: str) -> None:
 
     is_en = locale == "en-US"
     spinner = (
-        "Materializing semantic slices..." if is_en else "Materializando slices sem\u00e2nticos..."
+        "Materializing semantic slices..."
+        if is_en
+        else "Materializando slices sem\u00e2nticos..."
     )
 
     with st.spinner(spinner):
@@ -231,7 +225,9 @@ def _ensure_semantic_slices(locale: str) -> None:
             run_semantic_layer()
         except Exception as exc:  # pragma: no cover
             st.sidebar.warning(
-                "Semantic slices unavailable." if is_en else "Slices sem\u00e2nticos indispon\u00edveis."
+                "Semantic slices unavailable."
+                if is_en
+                else "Slices sem\u00e2nticos indispon\u00edveis."
             )
             st.sidebar.caption(str(exc))
 
@@ -242,15 +238,13 @@ def main() -> None:
 
     public_mode = is_public_visitor_mode()
     context: GovernanceAppContext | None
-    context_error: str | None = None
 
     try:
         context = build_context(locale)
-    except (FileNotFoundError, PermissionError) as exc:
+    except (FileNotFoundError, PermissionError):
         if not public_mode:
             raise
         context = None
-        context_error = str(exc)
         st.sidebar.warning(
             "Public visitor profile: dataset blocked."
             if locale == "en-US"
@@ -269,7 +263,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("Business KPIs" if is_en else "Indicadores anal\u00edticos"),
-                context_error=context_error,
             )
         ),
         title=("Business KPIs" if is_en else "Indicadores anal\u00edticos"),
@@ -299,13 +292,9 @@ def main() -> None:
                 },
             )
             if context is not None
-            else _render_dataset_required(
-                locale,
-                title="Overview",
-                context_error=context_error,
-            )
+            else _render_overview_without_data(locale)
         ),
-        title="Overview",
+        title="Overview" if is_en else "Visão geral",
         icon=":material/dashboard:",
         url_path="executive-overview",
     )
@@ -316,7 +305,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("LGPD & Privacy" if is_en else "LGPD e Privacidade"),
-                context_error=context_error,
             )
         ),
         title=("LGPD & Privacy" if is_en else "LGPD e Privacidade"),
@@ -330,7 +318,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("Data Quality" if is_en else "Data Quality"),
-                context_error=context_error,
             )
         ),
         title=("Data Quality" if is_en else "Data Quality"),
@@ -344,7 +331,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("Seller Performance" if is_en else "Seller Performance"),
-                context_error=context_error,
             )
         ),
         title=("Seller Performance" if is_en else "Seller Performance"),
@@ -358,7 +344,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("Cohort Retention" if is_en else "Cohort Retention"),
-                context_error=context_error,
             )
         ),
         title=("Cohort Retention" if is_en else "Cohort Retention"),
@@ -372,11 +357,8 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=(
-                    "Data Contracts & Catalog"
-                    if is_en
-                    else "Contratos e Cat\u00e1logo"
+                    "Data Contracts & Catalog" if is_en else "Contratos e Cat\u00e1logo"
                 ),
-                context_error=context_error,
             )
         ),
         title=("Data Contracts & Catalog" if is_en else "Contratos e Cat\u00e1logo"),
@@ -394,25 +376,20 @@ def main() -> None:
                     if is_en
                     else "An\u00e1lise Explorat\u00f3ria"
                 ),
-                context_error=context_error,
             )
         ),
-        title=(
-            "Exploratory Analysis" if is_en else "An\u00e1lise Explorat\u00f3ria"
-        ),
+        title=("Exploratory Analysis" if is_en else "An\u00e1lise Explorat\u00f3ria"),
         icon=":material/monitoring:",
         url_path="technical-analysis",
     )
     evidence_page = st.Page(
         lambda: (
             _render_report_page(context, locale)
-            if context is not None
+            if context is not None and not public_mode
             else render_governance_report(_visitor_report_paths(), locale)
         ),
         title=(
-            "Evidence & Traceability"
-            if is_en
-            else "Evid\u00eancias e rastreabilidade"
+            "Evidence & Traceability" if is_en else "Evid\u00eancias e rastreabilidade"
         ),
         icon=":material/description:",
         url_path="governance-report",
@@ -424,7 +401,6 @@ def main() -> None:
             else _render_dataset_required(
                 locale,
                 title=("Control Center" if is_en else "Central de Controles"),
-                context_error=context_error,
             )
         ),
         title=("Control Center" if is_en else "Central de Controles"),
@@ -432,7 +408,9 @@ def main() -> None:
         url_path="governance-control-center",
     )
     n8n_page = st.Page(
-        lambda: _render_n8n_automation_page(context if context is not None else None, locale),
+        lambda: _render_n8n_automation_page(
+            context if context is not None else None, locale
+        ),
         title=("n8n Automation" if is_en else "n8n Automation"),
         icon=":material/account_tree:",
         url_path="n8n-automation",
@@ -444,50 +422,47 @@ def main() -> None:
         url_path="genai-insights",
     )
     assistant_page = st.Page(
-        lambda: _render_assistant_page(context if context is not None else None, locale),
+        lambda: _render_assistant_page(
+            context if context is not None else None, locale
+        ),
         title=("RAG Assistant" if is_en else "Assistente RAG"),
         icon=":material/forum:",
         url_path="governance-assistant",
     )
     snowflake_page = st.Page(
-        lambda: _render_snowflake_page(context if context is not None else None, locale),
+        lambda: _render_snowflake_page(
+            context if context is not None else None, locale
+        ),
         title=("Snowflake Explorer" if is_en else "Snowflake Explorer"),
         icon=":material/database:",
         url_path="snowflake-explorer",
     )
 
-    sections: dict[str, list[StreamlitPage]]
-    if is_en:
-        sections = {
-            "Executive View": [overview_page],
-            "Quality & Governance": [
-                quality_page,
-                catalog_page,
-                privacy_page,
-                control_center_page,
-            ],
-            "Analytics": [revenue_page, seller_page, cohort_page, eda_page],
-            "Automation & AI": [n8n_page, genai_page, assistant_page, snowflake_page],
-            "Observability": [publication_page, evidence_page],
-        }
-    else:
-        sections = {
-            "Vis\u00e3o Executiva": [overview_page],
-            "Qualidade e Governan\u00e7a": [
-                quality_page,
-                catalog_page,
-                privacy_page,
-                control_center_page,
-            ],
-            "Analytics": [revenue_page, seller_page, cohort_page, eda_page],
-            "Automa\u00e7\u00e3o e IA": [
-                n8n_page,
-                genai_page,
-                assistant_page,
-                snowflake_page,
-            ],
-            "Observabilidade": [publication_page, evidence_page],
-        }
+    about_page = st.Page(
+        lambda: render_about(locale),
+        title="About the project" if is_en else "Sobre o projeto",
+        icon=":material/info:",
+        url_path="about-gap",
+    )
+    sections: dict[str, list[StreamlitPage]] = {
+        ("Executive View" if is_en else "Visão Executiva"): [overview_page],
+        "Analytics": [revenue_page, seller_page, cohort_page, eda_page],
+        ("Quality & Governance" if is_en else "Qualidade e Governança"): [
+            quality_page,
+            catalog_page,
+            privacy_page,
+            publication_page,
+            control_center_page,
+        ],
+        ("Engineering & Integrations" if is_en else "Engenharia e Integrações"): [
+            evidence_page,
+            n8n_page,
+            genai_page,
+            assistant_page,
+            snowflake_page,
+        ],
+        ("Project" if is_en else "Projeto"): [about_page],
+    }
 
     navigation = st.navigation(pages=sections, position="sidebar", expanded=True)
     navigation.run()

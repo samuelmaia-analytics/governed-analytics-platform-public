@@ -26,6 +26,9 @@ from app.pages.publication_governance import (
 
 
 class _FakeContainer:
+    def header(self, *_args, **_kwargs) -> None:
+        pass
+
     def __enter__(self):  # type: ignore[no-untyped-def]
         return self
 
@@ -1117,7 +1120,7 @@ def test_portfolio_overview_prioritizes_value_kpis_and_navigation(
         def caption(self, value: str) -> None:
             calls.append(("caption", value))
 
-        def markdown(self, value: str) -> None:
+        def markdown(self, value: str, **_kwargs) -> None:
             calls.append(("markdown", value))
 
         def write(self, value: str) -> None:
@@ -1193,25 +1196,27 @@ def test_portfolio_overview_prioritizes_value_kpis_and_navigation(
         duckdb_version="1.0",
     )
 
-    assert ("title", "GOVERNED ANALYTICS PLATFORM") in calls
-    assert any(kind == "caption" and "Dados confi" in value for kind, value in calls)
-    assert any(
-        kind == "markdown" and "analytics governada" in value for kind, value in calls
+    hero = next(
+        value for kind, value in calls if kind == "markdown" and "gap-hero" in value
     )
+    assert "<h1>Governed Analytics Platform</h1>" in hero
+    assert "Engenharia de Dados, Qualidade e Governança" in hero
     assert metrics[:7] == [
-        ("Registros governados", "2"),
-        ("Publication Gate", "Needs Review"),
+        ("Registros analisados", "2"),
         ("Data Quality Score", "100 / 100"),
         ("Privacy Risk Score", "15 / 100"),
-        ("Freshness dos dados", "Indisponível"),
-        ("Checks críticos", "0"),
+        ("Validações de qualidade", "—"),
+        ("Falhas críticas", "—"),
+        ("Publication Gate", "Needs Review"),
         ("Contratos de dados", "1/1 PASS"),
     ]
     assert page_links == ["Publication Gate", "Indicadores analíticos"]
     assert any(
-        kind == "info" and value.startswith("Problema:") for kind, value in calls
+        kind == "write" and "exposição indevida" in value for kind, value in calls
     )
-    assert any(kind == "success" and value.startswith("Evid") for kind, value in calls)
+    assert any(
+        kind == "caption" and "Evidência registrada" in value for kind, value in calls
+    )
     assert any(
         "github.com/samuelmaia-analytics" in value
         for kind, value in calls
@@ -1319,12 +1324,12 @@ def test_portfolio_overview_uses_demonstration_fallbacks_without_evidence(
     )
 
     assert metrics[:7] == [
-        ("Registros governados", "2"),
-        ("Publication Gate", "Unavailable"),
+        ("Registros analisados", "2"),
         ("Data Quality Score", "50 / 100"),
         ("Privacy Risk Score", "100 / 100"),
-        ("Freshness dos dados", "Indisponível"),
-        ("Checks críticos", "0"),
+        ("Validações de qualidade", "—"),
+        ("Falhas críticas", "—"),
+        ("Publication Gate", "Unavailable"),
         ("Contratos de dados", "Sem evidência"),
     ]
     assert ("Score de risco LGPD", "100 / 100") in metrics
@@ -1361,7 +1366,7 @@ def test_portfolio_overview_navigation_keeps_governance_links(
         def caption(self, value: str) -> None:
             calls.append(("caption", value))
 
-        def markdown(self, value: str) -> None:
+        def markdown(self, value: str, **_kwargs) -> None:
             calls.append(("markdown", value))
 
         def columns(self, count: int):  # type: ignore[no-untyped-def]
@@ -1422,18 +1427,18 @@ def test_portfolio_overview_navigation_keeps_governance_links(
         duckdb_version="1.0",
     )
 
-    assert ("title", "GOVERNED ANALYTICS PLATFORM") in calls
-    assert any(kind == "caption" and "Dados confi" in value for kind, value in calls)
-    assert any(
-        kind == "markdown" and "analytics governada" in value for kind, value in calls
+    hero = next(
+        value for kind, value in calls if kind == "markdown" and "gap-hero" in value
     )
+    assert "<h1>Governed Analytics Platform</h1>" in hero
+    assert "Engenharia de Dados, Qualidade e Governança" in hero
     assert metric_labels[:7] == [
-        "Registros governados",
-        "Publication Gate",
+        "Registros analisados",
         "Data Quality Score",
         "Privacy Risk Score",
-        "Freshness dos dados",
-        "Checks críticos",
+        "Validações de qualidade",
+        "Falhas críticas",
+        "Publication Gate",
         "Contratos de dados",
     ]
     assert page_links == ["Publication Gate", "Indicadores analíticos"]
@@ -1487,7 +1492,30 @@ def test_overview_without_published_source_does_not_load_persisted_evidence(
         assert metrics.get("Data contracts") == unavailable
     else:
         assert metrics.get("Contratos de dados") == unavailable
-    assert app.warning
+    assert app.info
+
+
+def test_public_evidence_displays_only_authorized_content(monkeypatch) -> None:
+    monkeypatch.setattr(governance_report_page, "is_public_visitor_mode", lambda: True)
+    monkeypatch.setattr(
+        governance_report_page,
+        "public_document_content",
+        lambda path: "Approved public note" if path.name == "approved.md" else None,
+    )
+    app = AppTest.from_string(
+        "from pathlib import Path\n"
+        "from app.pages.governance_report import render_governance_report\n"
+        "render_governance_report({\n"
+        "    'data_dictionary': Path('/synthetic-local/approved.md'),\n"
+        "    'restricted_report': Path('/synthetic-local/restricted.md'),\n"
+        "}, 'en-US')\n"
+    ).run()
+
+    assert not app.exception
+    assert [item.value for item in app.markdown] == ["Approved public note"]
+    assert "synthetic-local" not in str(app)
+    assert "restricted_report" not in str(app)
+    assert not app.tabs
 
 
 def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) -> None:
@@ -1518,8 +1546,11 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         def markdown(self, value: str) -> None:
             markdown_calls.append(value)
 
-        def columns(self, count: int):  # type: ignore[no-untyped-def]
-            return tuple(CapturingContainer() for _ in range(count))
+        def columns(self, count: int | list[float]):  # type: ignore[no-untyped-def]
+            return tuple(
+                CapturingContainer()
+                for _ in range(count if isinstance(count, int) else len(count))
+            )
 
         def tabs(self, tab_names):  # type: ignore[no-untyped-def]
             tabs.extend(tab_names)
@@ -1581,13 +1612,15 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
     monkeypatch.setattr(
         revenue_page,
         "_load_semantic_slice",
-        lambda path: category_slice.copy()
-        if "category_slice" in str(path)
-        else cohort_slice.copy(),
+        lambda path: (
+            category_slice.copy()
+            if "category_slice" in str(path)
+            else cohort_slice.copy()
+        ),
     )
     revenue_page.render_revenue_analytics(df, locale="pt-BR")  # type: ignore[arg-type]
 
-    assert titles == ["Business Insights"]
+    assert titles == ["Receita e performance"]
     assert metrics[:4] == [
         ("Receita total", "R$ 420,00"),
         ("Pedidos", "2"),
@@ -1606,7 +1639,8 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         "Concentração de receita por categoria",
         "Top sellers por receita",
     ]
-    assert any("dataset demonstrativo" in caption for caption in captions)
+    assert any("sazonalidade" in caption for caption in captions)
+    assert any("62,5% do total" in caption for caption in captions)
     assert any("análise de cohort" in caption for caption in captions)
 
     monthly_plot = next(
@@ -1618,7 +1652,7 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
     assert "title" not in monthly_plot[1]
     assert monthly_plot[1]["labels"] == {
         "order_year_month": "Ano-mês",
-        "revenue": "Receita",
+        "revenue": "Receita (R$)",
     }
     category_plot = next(
         (frame, kwargs)

@@ -6,6 +6,7 @@ import streamlit as st
 
 from app.i18n import LOCALE_EN_US, Locale
 from src.artifact_access import public_document_content
+from src.public_mode import is_public_visitor_mode
 
 _ARTIFACTS_PT_BR: dict[str, tuple[str, str]] = {
     "data_dictionary": (
@@ -58,6 +59,28 @@ def _artifact_presentation(name: str, *, is_en: bool) -> tuple[str, str]:
 def render_governance_report(report_paths: dict[str, Path], locale: Locale) -> None:
     is_en = locale == LOCALE_EN_US
     st.title("Governance Evidence" if is_en else "Evidências de Governança")
+    if is_public_visitor_mode():
+        st.caption(
+            "Documents available for public viewing."
+            if is_en
+            else "Documentos disponíveis para visualização pública."
+        )
+        authorized = False
+        for name, path in report_paths.items():
+            content = public_document_content(path)
+            if not content:
+                continue
+            authorized = True
+            title, _ = _artifact_presentation(name, is_en=is_en)
+            with st.expander(title):
+                st.markdown(content)
+        if not authorized:
+            st.info(
+                "No reports are authorized for this view. See About the project for public architecture and validation links."
+                if is_en
+                else "Nenhum relatório autorizado nesta tela. Consulte Sobre o projeto para acessar a arquitetura e as validações públicas."
+            )
+        return
     st.subheader(
         (
             "Persisted artifacts documenting data structure, privacy controls, "

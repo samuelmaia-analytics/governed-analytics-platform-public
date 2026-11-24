@@ -21,7 +21,7 @@ with socket.socket() as capture_socket:
 APP_URL = f"http://127.0.0.1:{APP_PORT}"
 
 PAGE_TARGETS: list[tuple[str, list[str], str]] = [
-    ("", ["GOVERNED ANALYTICS PLATFORM"], "executive_overview.png"),
+    ("", ["Governed Analytics Platform"], "executive_overview.png"),
     (
         "lgpd-privacy-risk",
         ["Privacidade e Controles LGPD"],

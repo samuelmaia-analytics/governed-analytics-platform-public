@@ -50,7 +50,7 @@ def _render_executive_kpis(df: pd.DataFrame) -> None:
         else None
     )
 
-    revenue_col, orders_col, ticket_col, sellers_col = st.columns(4)
+    revenue_col, orders_col, ticket_col, sellers_col = st.columns([1.5, 1, 1, 1])
     revenue_col.metric(
         "Receita total",
         _format_brl(revenue) if revenue is not None else "Não disponível",
@@ -140,7 +140,7 @@ def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
         y="revenue",
         labels={
             "order_year_month": "Ano-mês",
-            "revenue": "Receita",
+            "revenue": "Receita (R$)",
         },
     )
     fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
@@ -181,13 +181,15 @@ def _render_category_pareto(category_slice: pd.DataFrame, locale: Locale) -> Non
         category.head(15),
         x="category",
         y="revenue",
-        labels={"category": "Categoria", "revenue": "Receita"},
+        labels={"category": "Categoria", "revenue": "Receita (R$)"},
     )
     fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_tickangle=-35)
     st.plotly_chart(fig, width="stretch")
+    concentration = f"{category['cum_pct'].iloc[pareto_cutoff - 1]:.1f}".replace(
+        ".", ","
+    )
     st.caption(
-        f"As principais {pareto_cutoff} categorias concentram aproximadamente "
-        "80% da receita."
+        f"As {pareto_cutoff} categorias de maior receita concentram {concentration}% do total."
     )
     display_category = category[["category", "revenue", "cum_pct"]].rename(
         columns={
@@ -322,19 +324,38 @@ def _render_top_sellers(df: pd.DataFrame, locale: Locale) -> None:
 
 def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
     is_en = locale == LOCALE_EN_US
-    st.title("Business Insights")
-    st.markdown(
-        "Visão executiva de receita, concentração por categoria, comportamento "
-        "de clientes e desempenho de sellers."
+    st.title("Revenue and performance" if is_en else "Receita e performance")
+    st.write(
+        "Track monthly revenue and see where sales concentrate by category and seller."
+        if is_en
+        else "Acompanhe a receita mensal e veja onde as vendas se concentram por categoria e seller."
     )
-    st.caption(
-        "Os indicadores apresentados são derivados do dataset demonstrativo "
-        "utilizado no projeto de portfólio."
-    )
+    public_mode = is_public_visitor_mode()
+    if public_mode:
+        st.caption(
+            "Synthetic data · Values in BRL"
+            if is_en
+            else "Dados sintéticos · Valores em reais (BRL)"
+        )
+    if df.empty and public_mode:
+        st.info(
+            "Revenue data is unavailable."
+            if is_en
+            else "Dados de receita indisponíveis."
+        )
+        return
     _render_executive_kpis(df)
 
-    category_slice = build_category_slice(df) if is_public_visitor_mode() and not df.empty else _load_semantic_slice(CATEGORY_SLICE_PATH)
-    cohort_slice = build_cohort_slice(df) if is_public_visitor_mode() and not df.empty else _load_semantic_slice(COHORT_SLICE_PATH)
+    category_slice = (
+        build_category_slice(df)
+        if public_mode
+        else _load_semantic_slice(CATEGORY_SLICE_PATH)
+    )
+    cohort_slice = (
+        build_cohort_slice(df)
+        if public_mode
+        else _load_semantic_slice(COHORT_SLICE_PATH)
+    )
 
     tab_evolution, tab_pareto, tab_cohort, tab_sellers = st.tabs(
         [
@@ -353,7 +374,13 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
     with tab_sellers:
         _render_top_sellers(df, locale)
 
-    if category_slice.empty or cohort_slice.empty:
+    if public_mode and (category_slice.empty or cohort_slice.empty):
+        st.caption(
+            "Category or cohort analysis is unavailable for this sample."
+            if is_en
+            else "A análise por categoria ou coorte está indisponível para esta amostra."
+        )
+    elif category_slice.empty or cohort_slice.empty:
         st.caption(
             "Execute `python -m src.semantic_layer` para materializar os slices semânticos."
             if not is_en
