@@ -112,23 +112,58 @@ def build_cohort_slice(df: pd.DataFrame) -> pd.DataFrame:
     month_column = "purchase_cohort_month"
     offset_column = "cohort_order_month_number"
     keys = [month_column, offset_column]
-    cohort_month = pd.to_datetime(df[month_column], format="%Y-%m", errors="coerce")
+    supplied_month = pd.to_datetime(df[month_column], format="%Y-%m", errors="coerce")
     offset = pd.to_numeric(df[offset_column], errors="coerce")
-    valid = cohort_month.notna() & offset.ge(0) & offset.mod(1).eq(0)
-    dates = None
-    if "order_purchase_timestamp" in df:
-        dates = pd.to_datetime(df["order_purchase_timestamp"], errors="coerce")
-        actual_offset = (
-            (dates.dt.year - cohort_month.dt.year) * 12
-            + dates.dt.month
-            - cohort_month.dt.month
+    dates = pd.to_datetime(
+        df.get("order_purchase_timestamp", pd.Series(pd.NaT, index=df.index)),
+        errors="coerce",
+    )
+    order_month = dates.dt.to_period("M")
+    supplied_month = supplied_month.dt.to_period("M")
+    # Published facts omit the first-purchase timestamp. Anchor acquisition to
+    # the observed M0 purchase required by the retention denominator.
+    baseline = (
+        pd.DataFrame({"customer": df["customer_unique_id"], "month": order_month})
+        .loc[offset.eq(0) & supplied_month.eq(order_month) & df["order_id"].notna()]
+        .dropna()
+        .drop_duplicates()
+    )
+    unique_baseline = baseline.drop_duplicates("customer", keep=False).set_index(
+        "customer"
+    )
+    acquisition = df["customer_unique_id"].map(unique_baseline["month"])
+    first_observed_month = (
+        order_month.where(df["order_id"].notna())
+        .groupby(df["customer_unique_id"])
+        .transform("min")
+    )
+    actual_offset = (
+        (order_month.dt.year - acquisition.dt.year) * 12
+        + order_month.dt.month
+        - acquisition.dt.month
+    )
+    valid = (
+        acquisition.notna()
+        & dates.notna()
+        & acquisition.eq(first_observed_month)
+        & offset.ge(0)
+        & actual_offset.eq(offset)
+        & (supplied_month.eq(order_month) | supplied_month.eq(acquisition))
+    )
+    if "customer_first_purchase_timestamp" in df:
+        first_purchase = pd.to_datetime(
+            df["customer_first_purchase_timestamp"], errors="coerce"
         )
-        valid &= dates.notna() & actual_offset.eq(offset)
-    members = df.loc[valid].dropna(subset=["customer_unique_id", "order_id"])
-    months_per_customer = members.groupby("customer_unique_id")[month_column].nunique()
-    stable = members["customer_unique_id"].map(months_per_customer).eq(1)
-    members = members.loc[stable].assign(
-        **{offset_column: offset.loc[members.index].loc[stable]}
+        valid &= first_purchase.le(dates) & first_purchase.dt.to_period("M").eq(
+            acquisition
+        )
+
+    members = (
+        df.assign(
+            **{month_column: acquisition.dt.strftime("%Y-%m"), offset_column: offset}
+        )
+        .loc[valid]
+        .dropna(subset=["customer_unique_id", "order_id"])
     )
     population = members.loc[members[offset_column].eq(0), "customer_unique_id"]
     members = members.loc[members["customer_unique_id"].isin(population)]
@@ -150,18 +185,17 @@ def build_cohort_slice(df: pd.DataFrame) -> pd.DataFrame:
     cohort["avg_order_ticket"] = cohort["gross_item_value"].div(
         cohort["orders"].where(cohort["orders"].gt(0))
     )
-    if dates is not None:
-        latest = dates.max()
-        first = dates.min()
-        acquisition = pd.PeriodIndex(cohort[month_column], freq="M")
-        observed = acquisition + cohort[offset_column].to_numpy(dtype="int64")
-        cohort["retention_observable"] = (
-            pd.notna(latest)
-            and pd.notna(first)
-            and (observed.start_time.normalize() >= first.normalize())
-            & (observed.end_time.normalize() <= latest.normalize())
-            & (acquisition.start_time.normalize() >= first.normalize())
-        )
+    latest = dates.max()
+    first = dates.min()
+    cohort_periods = pd.PeriodIndex(cohort[month_column], freq="M")
+    observed = cohort_periods + cohort[offset_column].to_numpy(dtype="int64")
+    cohort["retention_observable"] = (
+        pd.notna(latest)
+        and pd.notna(first)
+        and (observed.start_time.normalize() >= first.normalize())
+        & (observed.end_time.normalize() <= latest.normalize())
+        & (cohort_periods.start_time.normalize() >= first.normalize())
+    )
     return cohort.sort_values(keys).reset_index(drop=True)
 
 

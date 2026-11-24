@@ -111,3 +111,60 @@ def test_item_grain_rejects_null_or_duplicate_keys(fact):
     assert not valid_item_grain(pd.concat([fact, fact.iloc[:1]]))
     fact.loc[0, "order_id"] = None
     assert not valid_item_grain(fact)
+
+
+@pytest.mark.parametrize("with_first_purchase", [False, True])
+def test_controlled_order_month_normalizes_to_first_purchase(fact, with_first_purchase):
+    # Published Python and dbt rows carry the current order month.
+    fact["purchase_cohort_month"] = fact["order_purchase_timestamp"].dt.strftime(
+        "%Y-%m"
+    )
+    if with_first_purchase:
+        fact["customer_first_purchase_timestamp"] = fact["customer_unique_id"].map(
+            {"u": pd.Timestamp("2024-01-01"), "v": pd.Timestamp("2024-01-31")}
+        )
+    repeated_item = fact.iloc[[3]].assign(order_item_id=2, total_item_value=9.60)
+    fact = pd.concat([fact, repeated_item], ignore_index=True)
+    # Wrong offset and inconsistent month must never create an extra order.
+    invalid = fact.iloc[[3, 3]].assign(
+        order_id=["bad-offset", "bad-month"],
+        cohort_order_month_number=[2, 1],
+        purchase_cohort_month=["2024-02", "2023-12"],
+    )
+    if with_first_purchase:
+        invalid_first = fact.iloc[[3]].assign(
+            order_id="bad-first-purchase",
+            customer_first_purchase_timestamp="2024-02-01",
+        )
+        invalid = pd.concat([invalid, invalid_first], ignore_index=True)
+    cohort = cohort_retention(
+        build_cohort_slice(pd.concat([fact, invalid], ignore_index=True))
+    ).set_index("cohort_order_month_number")
+
+    assert cohort["purchase_cohort_month"].unique().tolist() == ["2024-01"]
+    assert cohort["customers"].tolist() == [2, 1, 1]
+    assert cohort["orders"].tolist() == [2, 1, 1]
+    assert cohort["items"].tolist() == [3, 2, 1]
+    assert cohort["gross_item_value"].tolist() == pytest.approx([60.60, 50.00, 50.50])
+    assert cohort["avg_order_ticket"].tolist() == pytest.approx([30.30, 50.00, 50.50])
+    assert cohort.loc[1, "retention_rate"] == 50
+    assert pd.isna(cohort.loc[2, "retention_rate"])
+
+
+def test_cohort_excludes_ambiguous_or_unobservable_acquisition(fact):
+    conflicting_m0 = fact.iloc[[3]].assign(
+        order_id="ambiguous",
+        purchase_cohort_month="2024-02",
+        cohort_order_month_number=0,
+    )
+    cohort = build_cohort_slice(pd.concat([fact, conflicting_m0], ignore_index=True))
+    assert cohort["cohort_order_month_number"].tolist() == [0, 2]
+    assert cohort["orders"].tolist() == [1, 1]
+    assert build_cohort_slice(fact.drop(columns="order_purchase_timestamp")).empty
+
+    false_baseline = fact.copy()
+    false_baseline.loc[[0, 1, 3], "cohort_order_month_number"] = [1, 1, 0]
+    false_baseline.loc[3, "purchase_cohort_month"] = "2024-02"
+    cohort = build_cohort_slice(false_baseline)
+    assert cohort["purchase_cohort_month"].tolist() == ["2024-01", "2024-01"]
+    assert cohort["cohort_order_month_number"].tolist() == [0, 2]
