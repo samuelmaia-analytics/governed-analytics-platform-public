@@ -257,7 +257,7 @@ def main() -> None:
             else "Perfil p\u00fablico: dataset bloqueado."
         )
 
-    if public_mode and context is not None:
+    if (not public_mode) and context is not None:
         _ensure_semantic_slices(locale)
 
     is_en = locale == "en-US"

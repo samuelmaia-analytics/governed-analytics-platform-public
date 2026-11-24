@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import tempfile
+import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -177,7 +178,7 @@ def save_dataset(df: pd.DataFrame, path: Path) -> None:
 
 
 def stage_dataset(df: pd.DataFrame, path: Path, temp_dir: Path) -> tuple[Path, Path]:
-    token = f"{datetime.utcnow().timestamp():.6f}"
+    token = uuid.uuid4().hex
     parquet_tmp = temp_dir / f"{path.name}.{token}.tmp"
     csv_target = path.with_suffix(".csv")
     csv_tmp = temp_dir / f"{csv_target.name}.{token}.tmp"
@@ -223,11 +224,54 @@ def render_report(
     return "\n".join(lines)
 
 
-def run_semantic_layer() -> SemanticArtifacts:
-    ensure_directory(PUBLISHED_SEMANTIC_DIR)
-    ensure_directory(DOCS_DIR)
-    temp_dir = PUBLISHED_SEMANTIC_DIR / '.tmp_semantic_layer'
-    ensure_directory(temp_dir)
+def _resolve_targets(
+    output_dir: Path | None,
+    docs_dir: Path | None,
+) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path]:
+    if output_dir is None and docs_dir is None:
+        return (
+            PUBLISHED_SEMANTIC_DIR,
+            DOCS_DIR,
+            LOGISTICS_PATH,
+            SELLER_PATH,
+            COHORT_PATH,
+            CATEGORY_PATH,
+            STATE_PATH,
+            REPORT_PATH,
+        )
+
+    resolved_output = output_dir or PUBLISHED_SEMANTIC_DIR
+    resolved_docs = docs_dir or DOCS_DIR
+    return (
+        resolved_output,
+        resolved_docs,
+        resolved_output / "logistics_slice.parquet",
+        resolved_output / "seller_slice.parquet",
+        resolved_output / "cohort_slice.parquet",
+        resolved_output / "category_slice.parquet",
+        resolved_output / "state_performance_slice.parquet",
+        resolved_docs / "semantic_layer.md",
+    )
+
+
+def run_semantic_layer(
+    *,
+    output_dir: Path | None = None,
+    docs_dir: Path | None = None,
+) -> SemanticArtifacts:
+    (
+        resolved_output,
+        resolved_docs,
+        logistics_path,
+        seller_path,
+        cohort_path,
+        category_path,
+        state_path,
+        report_path,
+    ) = _resolve_targets(output_dir, docs_dir)
+
+    ensure_directory(resolved_output)
+    ensure_directory(resolved_docs)
 
     published = load_published_table()
     logistics = build_logistics_slice(published)
@@ -236,14 +280,18 @@ def run_semantic_layer() -> SemanticArtifacts:
     category = build_category_slice(published)
     state = build_state_performance_slice(published)
 
-    staged: list[tuple[Path, Path, Path]] = []
-    try:
+    with tempfile.TemporaryDirectory(
+        prefix=".tmp_semantic_layer_",
+        dir=resolved_output,
+    ) as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        staged: list[tuple[Path, Path, Path]] = []
         for df, target in (
-            (logistics, LOGISTICS_PATH),
-            (seller, SELLER_PATH),
-            (cohort, COHORT_PATH),
-            (category, CATEGORY_PATH),
-            (state, STATE_PATH),
+            (logistics, logistics_path),
+            (seller, seller_path),
+            (cohort, cohort_path),
+            (category, category_path),
+            (state, state_path),
         ):
             parquet_tmp, csv_tmp = stage_dataset(df, target, temp_dir)
             staged.append((parquet_tmp, csv_tmp, target))
@@ -251,23 +299,20 @@ def run_semantic_layer() -> SemanticArtifacts:
         for parquet_tmp, csv_tmp, target in staged:
             commit_staged_dataset(parquet_tmp, csv_tmp, target)
 
-        REPORT_PATH.write_text(
+        report_path.write_text(
             render_report(logistics, seller, cohort, category, state),
-            encoding='utf-8',
+            encoding="utf-8",
         )
-    finally:
-        for candidate in temp_dir.glob('*.tmp'):
-            candidate.unlink(missing_ok=True)
 
     LOGGER.info(
-        'Camada semantica expandida materializada em %s', PUBLISHED_SEMANTIC_DIR
+        "Camada semantica expandida materializada em %s", resolved_output
     )
     return SemanticArtifacts(
-        logistics_path=LOGISTICS_PATH,
-        seller_path=SELLER_PATH,
-        cohort_path=COHORT_PATH,
-        category_path=CATEGORY_PATH,
-        state_path=STATE_PATH,
+        logistics_path=logistics_path,
+        seller_path=seller_path,
+        cohort_path=cohort_path,
+        category_path=category_path,
+        state_path=state_path,
     )
 
 

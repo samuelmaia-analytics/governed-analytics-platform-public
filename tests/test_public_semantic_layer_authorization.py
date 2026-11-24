@@ -149,15 +149,6 @@ def test_public_semantic_layer_materialization_is_fail_closed(tmp_path: Path, mo
     semantic_dir = tmp_path / "semantic"
     docs_dir = tmp_path / "docs"
 
-    monkeypatch.setattr(semantic_layer, "PUBLISHED_SEMANTIC_DIR", semantic_dir)
-    monkeypatch.setattr(semantic_layer, "DOCS_DIR", docs_dir)
-    monkeypatch.setattr(semantic_layer, "LOGISTICS_PATH", semantic_dir / "logistics_slice.parquet")
-    monkeypatch.setattr(semantic_layer, "SELLER_PATH", semantic_dir / "seller_slice.parquet")
-    monkeypatch.setattr(semantic_layer, "COHORT_PATH", semantic_dir / "cohort_slice.parquet")
-    monkeypatch.setattr(semantic_layer, "CATEGORY_PATH", semantic_dir / "category_slice.parquet")
-    monkeypatch.setattr(semantic_layer, "STATE_PATH", semantic_dir / "state_performance_slice.parquet")
-    monkeypatch.setattr(semantic_layer, "REPORT_PATH", docs_dir / "semantic_layer.md")
-
     calls = {"count": 0}
     real_stage = semantic_layer.stage_dataset
 
@@ -170,10 +161,103 @@ def test_public_semantic_layer_materialization_is_fail_closed(tmp_path: Path, mo
     monkeypatch.setattr(semantic_layer, "stage_dataset", broken_stage)
 
     with pytest.raises(RuntimeError):
-        semantic_layer.run_semantic_layer()
+        semantic_layer.run_semantic_layer(output_dir=semantic_dir, docs_dir=docs_dir)
 
     assert not (semantic_dir / "logistics_slice.parquet").exists()
     assert not (semantic_dir / "seller_slice.parquet").exists()
     assert not (semantic_dir / "cohort_slice.parquet").exists()
     assert not (semantic_dir / "category_slice.parquet").exists()
     assert not (semantic_dir / "state_performance_slice.parquet").exists()
+
+
+
+def test_semantic_layer_cleanup_isolated_per_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    semantic_dir = tmp_path / "semantic"
+    docs_dir = tmp_path / "docs"
+
+    foreign_dir = semantic_dir / ".tmp_semantic_layer_foreign"
+    foreign_dir.mkdir(parents=True)
+    foreign_file = foreign_dir / "foreign.tmp"
+    foreign_file.write_text("keep", encoding="utf-8")
+
+    monkeypatch.setattr(semantic_layer, "load_published_table", lambda: generate(rows=501))
+
+    semantic_layer.run_semantic_layer(output_dir=semantic_dir, docs_dir=docs_dir)
+
+    assert foreign_file.exists(), "Cleanup must not delete unrelated temp artifacts"
+    remaining = [p for p in semantic_dir.glob(".tmp_semantic_layer_*") if p != foreign_dir]
+    assert not remaining, "Temp dirs must be removed"
+
+
+def test_semantic_layer_concurrent_runs_use_isolated_temp_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setattr(semantic_layer, "load_published_table", lambda: generate(rows=801))
+
+    def _run(target: Path) -> None:
+        semantic_layer.run_semantic_layer(output_dir=target / "semantic", docs_dir=target / "docs")
+
+    run_a = tmp_path / "run_a"
+    run_b = tmp_path / "run_b"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(_run, [run_a, run_b]))
+
+    assert (run_a / "semantic" / "seller_slice.parquet").exists()
+    assert (run_b / "semantic" / "seller_slice.parquet").exists()
+
+
+
+def test_semantic_layer_concurrent_runs_same_output_dir_produces_consistent_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    semantic_dir = tmp_path / 'semantic'
+    docs_dir = tmp_path / 'docs'
+
+    barrier = Barrier(2)
+    reports: dict[str, list[str]] = {'texts': []}
+
+    def render_report(*_args, **_kwargs) -> str:
+        text = ('report-{}-'.format(len(reports['texts'])) + ('X' * 50_000))
+        reports['texts'].append(text)
+        return text
+
+    real_commit = semantic_layer.commit_staged_dataset
+
+    def commit_with_barrier(parquet_tmp: Path, csv_tmp: Path, target: Path) -> None:
+        real_commit(parquet_tmp, csv_tmp, target)
+        if target.name == 'state_performance_slice.parquet':
+            barrier.wait(timeout=10)
+
+    monkeypatch.setattr(semantic_layer, 'load_published_table', lambda: generate(rows=1001))
+    monkeypatch.setattr(semantic_layer, 'render_report', render_report)
+    monkeypatch.setattr(semantic_layer, 'commit_staged_dataset', commit_with_barrier)
+
+    def _run() -> None:
+        semantic_layer.run_semantic_layer(output_dir=semantic_dir, docs_dir=docs_dir)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _: _run(), range(2)))
+
+    expected_reports = set(reports['texts'])
+    report_path = docs_dir / 'semantic_layer.md'
+    assert report_path.exists()
+    assert report_path.read_text(encoding='utf-8') in expected_reports
+
+    for slice_name in (
+        'logistics_slice.parquet',
+        'seller_slice.parquet',
+        'cohort_slice.parquet',
+        'category_slice.parquet',
+        'state_performance_slice.parquet',
+    ):
+        slice_path = semantic_dir / slice_name
+        assert slice_path.exists()
+        df = pd.read_parquet(slice_path)
+        assert not df.empty
+
+    assert not list(semantic_dir.glob('.tmp_semantic_layer_*')), 'Temp dirs must be cleaned'
