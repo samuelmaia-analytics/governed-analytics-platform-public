@@ -188,10 +188,12 @@ def render_data_quality(
         else 0
     )
 
+    critical_fail_count = 0
     high_fail_count = 0
     medium_fail_count = 0
     if {"status", "severity"}.issubset(quality_table.columns):
         failed_df = quality_table[quality_table["status"] == "FAIL"]
+        critical_fail_count = int((failed_df["severity"] == "critical").sum())
         high_fail_count = int((failed_df["severity"] == "high").sum())
         medium_fail_count = int((failed_df["severity"] == "medium").sum())
 
@@ -211,7 +213,7 @@ def render_data_quality(
     with col6:
         st.metric("Total de colunas", _format_integer(quality_results["total_columns"]))
     with col7:
-        st.metric("Score de qualidade", f"{quality_score} / 100")
+        st.metric("Score de qualidade", f"{quality_score} / 100" if total_checks else "—")
     st.caption(
         "O score resume o resultado das validações técnicas do cenário demonstrativo."
     )
@@ -263,14 +265,14 @@ def render_data_quality(
         height=220,
     )
 
-    st.markdown("### Validações críticas com falha")
+    st.markdown("### Falhas por severidade crítica, alta ou média")
     if {"status", "severity"}.issubset(quality_table.columns):
         critical_failed = quality_table[
             (quality_table["status"] == "FAIL")
-            & (quality_table["severity"].isin(["high", "medium"]))
+            & (quality_table["severity"].isin(["critical", "high", "medium"]))
         ]
         if critical_failed.empty:
-            st.success("Nenhuma falha crítica de severidade alta ou média encontrada.")
+            st.success("Nenhuma falha de severidade crítica, alta ou média encontrada.")
         else:
             st.dataframe(
                 _build_executive_table(critical_failed),
@@ -278,21 +280,16 @@ def render_data_quality(
                 hide_index=True,
             )
 
-    st.markdown("### Resultado da avaliação")
-    if high_fail_count > 0:
-        st.error("Bloqueado")
-        st.caption(
-            "O cenário demonstrativo contém validações com falha e, por isso, "
-            "a publicação é bloqueada pelas regras de qualidade."
-        )
-    elif medium_fail_count > 0 or fail_count > 0:
+    st.markdown("### Resultado diagnóstico de qualidade")
+    st.caption("Score = 100 menos 10 pontos por falha, com mínimo zero. Consulte o Publication Gate para a decisão de publicação.")
+    if total_checks == 0:
+        st.info("Sem resultados de validação.")
+    elif critical_fail_count or high_fail_count:
+        st.error("Falhas críticas ou altas")
+    elif fail_count or warn_count:
         st.warning("Requer revisão")
-        st.caption(
-            "O cenário demonstrativo requer revisão das falhas identificadas "
-            "antes da publicação analítica."
-        )
     else:
-        st.success("Confiável")
+        st.success("Validações executadas sem falhas ou alertas.")
 
     with st.expander("Detalhes técnicos das validações", expanded=False):
         st.metric("PASS / WARN / FAIL", f"{pass_count} / {warn_count} / {fail_count}")

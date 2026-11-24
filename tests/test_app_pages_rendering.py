@@ -303,7 +303,7 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
     assert ("Total de linhas", "112.650") in metrics
     assert ("Total de colunas", "34") in metrics
     assert ("Score de qualidade", "50 / 100") in metrics
-    assert errors == ["Bloqueado"]
+    assert errors == ["Falhas críticas ou altas"]
 
     status_chart, status_chart_options = next(
         (chart, options)
@@ -1622,9 +1622,9 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
 
     assert titles == ["Receita e performance"]
     assert metrics[:4] == [
-        ("Receita total", "R$ 420,00"),
+        ("GMV (itens + frete)", "R$ 420,00"),
         ("Pedidos", "2"),
-        ("Ticket médio", "R$ 210,00"),
+        ("Ticket por pedido", "R$ 210,00"),
         ("Sellers ativos", "2"),
     ]
     assert tabs == [
@@ -1661,7 +1661,7 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
     )
     assert "title" not in category_plot[1]
     assert {kwargs["title"] for _, _, kwargs in plot_calls if "title" in kwargs} == {
-        "Ticket médio por cohort",
+        "Valor médio por item por cohort",
         "Retenção por cohort (%)",
         "Top sellers por receita",
     }
@@ -1793,7 +1793,7 @@ def test_render_seller_performance_with_and_without_data(monkeypatch) -> None:
     assert any("dataset" not in value.lower() for value in captions)
     assert metrics == [
         ("Sellers ativos", "22"),
-        ("Pedidos", "253"),
+        ("Pedidos por seller (soma)", "253"),
         ("Taxa média de atraso", "11,5%"),
         ("Tempo médio de entrega", "16,5 dias"),
     ]
@@ -1978,7 +1978,7 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
             return figure
 
     original_merge = pd.DataFrame.merge
-    original_pivot_table = pd.DataFrame.pivot_table
+    original_pivot_table = pd.DataFrame.pivot
 
     def capturing_merge(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         merge_calls.append(dict(kwargs))
@@ -1989,7 +1989,7 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
         return original_pivot_table(self, *args, **kwargs)
 
     monkeypatch.setattr(pd.DataFrame, "merge", capturing_merge)
-    monkeypatch.setattr(pd.DataFrame, "pivot_table", capturing_pivot_table)
+    monkeypatch.setattr(pd.DataFrame, "pivot", capturing_pivot_table)
     monkeypatch.setattr(cohort_page, "st", CapturingStreamlit())
     monkeypatch.setattr(cohort_page, "px", CapturingPlotlyExpress())
 
@@ -2029,15 +2029,16 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
     assert metrics == [
         ("Cohorts analisados", "1"),
         ("Período analisado", "2024-01 a 2024-03"),
-        ("Meses relativos observados", "2"),
+        ("Meses relativos representados", "2"),
         ("Células com retenção calculável", "2"),
     ]
     assert "### Leitura executiva" in markdown_calls
     assert tabs == ["Retenção", "Ticket médio"]
     assert len(plot_calls) == 2
 
-    assert merge_calls == [{"on": "purchase_cohort_month", "how": "left"}]
-    assert [call["aggfunc"] for call in pivot_calls] == ["mean", "mean"]
+    assert merge_calls == [
+        {"on": "purchase_cohort_month", "how": "left", "validate": "many_to_one"}
+    ]
     assert [call["values"] for call in pivot_calls] == [
         "retention_rate",
         "avg_ticket",
@@ -2046,8 +2047,8 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
     assert all(call["columns"] == "cohort_order_month_number" for call in pivot_calls)
 
     expected_retention_pivot = pd.DataFrame(
-        [[100.0, 45.0]],
-        index=pd.Index(["2024-01"], name="purchase_cohort_month"),
+        [[100.0, 45.0], [float("nan")] * 2, [float("nan")] * 2],
+        index=pd.Index(["2024-01", "2024-02", "2024-03"], name="purchase_cohort_month"),
         columns=pd.Index([0, 1], name="cohort_order_month_number"),
     )
     pd.testing.assert_frame_equal(
@@ -2068,6 +2069,7 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
         "text_auto": False,
         "aspect": "auto",
         "color_continuous_scale": "Teal",
+        "range_color": (0, 100),
         "title": "Matriz de retenção por cohort (%)",
         "labels": {
             "x": "Meses desde a primeira compra",
@@ -2079,14 +2081,18 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
         "text_auto": False,
         "aspect": "auto",
         "color_continuous_scale": "Blues",
-        "title": "Ticket médio por cohort",
+        "title": "Valor médio por item por cohort",
         "labels": {
             "x": "Meses desde a primeira compra",
             "y": "Cohort de compra",
-            "color": "Ticket médio",
+            "color": "Valor médio por item (R$)",
         },
     }
-    assert figures[0].trace_updates[0]["text"].tolist() == [["100,0%", "45,0%"]]
+    assert figures[0].trace_updates[0]["text"].tolist() == [
+        ["100,0%", "45,0%"],
+        ["—", "—"],
+        ["—", "—"],
+    ]
     assert figures[1].trace_updates[0]["text"].tolist() == [
         ["R$ 120,00", "R$ 115,00"],
         ["R$ 130,00", "R$ 125,00"],
@@ -2104,7 +2110,7 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
         "Mês relativo",
         "Clientes",
         "Retenção",
-        "Ticket médio",
+        "Valor médio por item",
     ]
     assert len(executive_table) == len(cohort_df)
     assert executive_table["Cohort"].tolist() == [
@@ -2129,7 +2135,7 @@ def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:
         "—",
         "—",
     ]
-    assert executive_table["Ticket médio"].tolist() == [
+    assert executive_table["Valor médio por item"].tolist() == [
         "R$ 120,00",
         "R$ 115,00",
         "R$ 130,00",

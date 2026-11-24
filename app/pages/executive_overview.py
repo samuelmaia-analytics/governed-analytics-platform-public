@@ -65,7 +65,7 @@ def _count_critical_failures(quality_results: DataQualityResult) -> int:
     return sum(
         1
         for check in checks
-        if str(check.get("status", "")).strip().upper() != "PASS"
+        if str(check.get("status", "")).strip().upper() == "FAIL"
         and str(check.get("severity", "")).strip().lower() == "critical"
     )
 
