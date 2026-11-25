@@ -396,6 +396,12 @@ def _render_overview(df: pd.DataFrame, locale: Locale) -> None:
         st.markdown(
             "### Missing values profile" if is_en else "### Perfil de valores ausentes"
         )
+        if not df.empty and columns_with_nulls == 0:
+            st.info(
+                "No missing values in the fields evaluated."
+                if is_en
+                else "Nenhum valor nulo nos campos avaliados."
+            )
         st.dataframe(
             _present_null_profile(null_df, locale),
             width="stretch",

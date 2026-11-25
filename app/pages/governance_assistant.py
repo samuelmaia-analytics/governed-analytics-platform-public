@@ -12,6 +12,7 @@ from src.governance_rag import (
     answer_question,
     load_corpus,
 )
+from src.public_mode import is_public_visitor_mode
 
 
 def _consume_query_consent() -> None:
@@ -55,6 +56,31 @@ def _prepare_provider_flags() -> None:
 def render_governance_assistant(locale: Locale) -> None:
     is_en = locale == LOCALE_EN_US
     st.title("Governance Assistant" if is_en else "Assistente de Governan\u00e7a")
+    if is_public_visitor_mode():
+        st.info(
+            "Documentation only in the visitor profile."
+            if is_en
+            else "Consulta documental no perfil visitante."
+        )
+        st.markdown(
+            """
+1. The local RAG validates the source manifest and document fingerprints.
+2. TF-IDF ranks excerpts from the approved corpus. Replies cite those excerpts and abstain when evidence is insufficient.
+3. In a controlled environment, the optional external provider requires server-side enablement and consent for the individual query.
+"""
+            if is_en
+            else """
+1. O RAG local valida o manifesto de fontes e os hashes dos documentos.
+2. O TF-IDF classifica trechos da base aprovada. As respostas citam os trechos e o assistente se abstém quando a evidência é insuficiente.
+3. Em ambiente controlado, o provedor externo opcional exige habilitação no servidor e consentimento para cada pergunta.
+"""
+        )
+        st.caption(
+            "This page does not load a corpus, accept prompts or call providers."
+            if is_en
+            else "Esta página não carrega a base documental, não recebe perguntas e não chama provedores."
+        )
+        return
     st.caption(
         "Check the answer against its sources. Retrieved excerpts are evidence, not authorization to act."
         if is_en

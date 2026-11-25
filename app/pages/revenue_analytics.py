@@ -51,21 +51,29 @@ def _render_executive_kpis(df: pd.DataFrame) -> None:
         else None
     )
 
+    order_label = (
+        f"{order_count:,}".replace(",", ".")
+        if order_count is not None
+        else "Não disponível"
+    )
+    seller_label = (
+        f"{active_sellers:,}".replace(",", ".")
+        if active_sellers is not None
+        else "Não disponível"
+    )
     revenue_col, orders_col, ticket_col, sellers_col = st.columns([1.5, 1, 1, 1])
     revenue_col.metric(
         "GMV (itens + frete)",
         _format_brl(revenue) if revenue is not None else "Não disponível",
     )
-    orders_col.metric(
-        "Pedidos", f"{order_count:,}" if order_count is not None else "Não disponível"
-    )
+    orders_col.metric("Pedidos", order_label)
     ticket_col.metric(
         "Ticket por pedido",
         _format_brl(average_ticket) if average_ticket is not None else "Não disponível",
     )
     sellers_col.metric(
         "Sellers ativos",
-        f"{active_sellers:,}" if active_sellers is not None else "Não disponível",
+        seller_label,
     )
 
     st.markdown("### Leitura executiva")
@@ -77,8 +85,8 @@ def _render_executive_kpis(df: pd.DataFrame) -> None:
     ):
         st.markdown(
             f"- A base analisada reúne **{_format_brl(revenue)}** em receita, "
-            f"distribuída entre **{order_count:,} pedidos** e "
-            f"**{active_sellers:,} sellers ativos**.\n"
+            f"distribuída entre **{order_label} pedidos** e "
+            f"**{seller_label} sellers ativos**.\n"
             f"- O ticket médio observado no período é de "
             f"**{_format_brl(average_ticket)}**.\n"
             "- As análises abaixo detalham evolução temporal, concentração por "

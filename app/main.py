@@ -12,7 +12,7 @@ PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from app.context import GovernanceAppContext, build_context  # noqa: E402
+from app.context import GovernanceAppContext, build_context, configure_public_profile  # noqa: E402
 from app.components.ui import inject_base_styles  # noqa: E402
 from app.i18n import build_locale_selector  # noqa: E402
 from app.pages.about import render_about  # noqa: E402
@@ -33,6 +33,10 @@ from app.pages.governance_control_center import (  # noqa: E402
 from app.pages.governance_report import render_governance_report  # noqa: E402
 from app.pages.lgpd_privacy_risk import render_lgpd_privacy_risk  # noqa: E402
 from app.pages.n8n_automation import render_n8n_automation  # noqa: E402
+from app.pages.public_integrations import (  # noqa: E402
+    render_public_automation,
+    render_public_snowflake,
+)
 from app.pages.publication_governance import (  # noqa: E402
     render_publication_governance,
 )
@@ -127,13 +131,7 @@ def _render_control_center_page(context: GovernanceAppContext, locale: str) -> N
 
 def _render_snowflake_page(_context: GovernanceAppContext | None, locale: str) -> None:
     if is_public_visitor_mode():
-        is_en = locale == "en-US"
-        st.title("Snowflake Integration" if is_en else "Integração Snowflake")
-        st.info(
-            "Connections and queries are unavailable in the public profile."
-            if is_en
-            else "Conexões e consultas estão indisponíveis no perfil público."
-        )
+        render_public_snowflake(locale)
         return
     render_snowflake_explorer(locale)
 
@@ -142,22 +140,22 @@ def _render_n8n_automation_page(
     _context: GovernanceAppContext | None, locale: str
 ) -> None:
     if is_public_visitor_mode():
-        is_en = locale == "en-US"
-        st.title("Automation and orchestration" if is_en else "Automação e Orquestração")
-        st.write(
-            "Architecture overview. n8n templates describe scheduling, pipeline execution "
-            "and failure handling. Workflow inspection and execution require a controlled environment."
-            if is_en
-            else "Visão documental. Os templates n8n descrevem agendamento, execução do pipeline "
-            "e tratamento de falhas. A inspeção e a execução dos workflows exigem um ambiente controlado."
-        )
+        render_public_automation(locale)
         return
     render_n8n_automation()
 
 
 def _render_publication_governance_page(
-    _context: GovernanceAppContext | None, _locale: str
+    context: GovernanceAppContext | None, locale: str
 ) -> None:
+    if is_public_visitor_mode():
+        render_publication_governance(
+            public_gate=context.public_distribution_gate
+            if context is not None
+            else None,
+            locale=locale,
+        )
+        return
     render_publication_governance()
 
 
@@ -233,6 +231,7 @@ def _ensure_semantic_slices(locale: str) -> None:
 
 
 def main() -> None:
+    configure_public_profile()
     locale = build_locale_selector()
     inject_base_styles()
 

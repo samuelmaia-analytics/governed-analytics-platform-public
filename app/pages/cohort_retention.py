@@ -172,10 +172,11 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
             "Cohort: %{y}<br>%{customdata}<br>Retenção: %{text}<extra></extra>"
         ),
     )
+    retention_tick_step = max(1, (len(retention_offsets) + 4) // 5)
     fig_retention.update_xaxes(
         tickmode="array",
-        tickvals=retention_offsets,
-        ticktext=retention_offset_labels,
+        tickvals=retention_offsets[::retention_tick_step],
+        ticktext=retention_offset_labels[::retention_tick_step],
         title_text="Meses desde a primeira compra",
     )
     fig_retention.update_yaxes(title_text="Cohort de compra")
@@ -210,10 +211,11 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
             "Cohort: %{y}<br>%{customdata}<br>Ticket médio: %{text}<extra></extra>"
         ),
     )
+    ticket_tick_step = max(1, (len(ticket_offsets) + 4) // 5)
     fig_ticket.update_xaxes(
         tickmode="array",
-        tickvals=ticket_offsets,
-        ticktext=ticket_offset_labels,
+        tickvals=ticket_offsets[::ticket_tick_step],
+        ticktext=ticket_offset_labels[::ticket_tick_step],
         title_text="Meses desde a primeira compra",
     )
     fig_ticket.update_yaxes(title_text="Cohort de compra")
@@ -224,6 +226,35 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
     with ticket_tab:
         st.caption(f"{ticket_label} · valores em reais.")
         st.plotly_chart(fig_ticket, width="stretch")
+
+    if is_public_visitor_mode() and retention["retention_rate"].notna().any():
+        st.subheader("Evolução da retenção por coorte")
+        observable_cohorts = sorted(
+            retention.loc[
+                retention["retention_rate"].notna(), "purchase_cohort_month"
+            ].unique()
+        )
+        cohort_month = st.selectbox("Mês de aquisição", observable_cohorts)
+        selected = retention.loc[retention["purchase_cohort_month"].eq(cohort_month)]
+        max_offset = int(selected["cohort_order_month_number"].max())
+        trend = selected.set_index("cohort_order_month_number").reindex(
+            range(max_offset + 1)
+        )
+        fig_trend = px.line(
+            trend,
+            y="retention_rate",
+            markers=True,
+            range_y=(0, 100),
+            labels={
+                "cohort_order_month_number": "Mês desde a primeira compra",
+                "retention_rate": "Retenção (%)",
+            },
+        )
+        fig_trend.update_traces(connectgaps=False)
+        st.plotly_chart(fig_trend, width="stretch")
+        st.caption(
+            "Cada ponto usa a população de Mês 0. Células sem taxa observável aparecem como lacunas."
+        )
 
     technical_table = retention[
         [

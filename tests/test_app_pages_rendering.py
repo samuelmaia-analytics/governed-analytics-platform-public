@@ -328,8 +328,12 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
         for chart, options in bar_charts
         if isinstance(chart, pd.DataFrame) and "column_label" in chart.columns
     )
-    assert null_chart["column_name"].tolist() == list(original_null_pct)
-    assert null_chart["null_pct"].tolist() == list(original_null_pct.values())
+    assert null_chart["column_name"].tolist() == [
+        name for name, pct in original_null_pct.items() if pct > 0
+    ]
+    assert null_chart["null_pct"].tolist() == [
+        pct for pct in original_null_pct.values() if pct > 0
+    ]
     assert null_chart["column_label"].tolist() == [
         "Desvio do prazo",
         "Data de entrega",
@@ -340,17 +344,6 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
         "Despacho seller",
         "Avaliação média",
         "Entrega média seller",
-        "ID pedido",
-        "Item pedido",
-        "Mês pedido",
-        "Status pedido",
-        "Cliente",
-        "Entrega estimada",
-        "Data pedido",
-        "Ano pedido",
-        "Data da compra",
-        "Pedidos seller",
-        "Faixa de volume",
     ]
     assert all(not label.endswith(("...", "…")) for label in null_chart["column_label"])
     assert null_chart_options == {
@@ -360,7 +353,7 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
         "y_label": "Campo",
         "horizontal": True,
         "sort": False,
-        "height": 620,
+        "height": max(220, min(620, 45 * len(null_chart) + 80)),
     }
     assert "### Percentual de valores nulos por campo" in markdown_calls
 

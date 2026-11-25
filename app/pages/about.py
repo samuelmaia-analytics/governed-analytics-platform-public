@@ -11,10 +11,10 @@ def render_about(locale: Locale) -> None:
     st.title("About the project" if is_en else "Sobre o projeto")
     st.write(
         "GAP is an independent portfolio project. Its public demo uses synthetic data "
-        "to illustrate data engineering, analytics, quality and publication controls."
+        "to demonstrate how quality and publication controls reduce the risk of analysis based on incomplete data or unauthorized distribution."
         if is_en
         else "O GAP é um projeto independente de portfólio. A demonstração pública usa "
-        "dados sintéticos para ilustrar engenharia de dados, analytics, qualidade e controles de publicação."
+        "dados sintéticos para demonstrar como controles de qualidade e publicação reduzem o risco de análises com dados incompletos ou de distribuição sem autorização."
     )
     st.header("Architecture and validation" if is_en else "Arquitetura e validação")
     st.write(
@@ -25,6 +25,22 @@ def render_about(locale: Locale) -> None:
         else "Python e DuckDB apoiam o processamento local, Parquet armazena artefatos, "
         "e Streamlit e Plotly apresentam as análises. A arquitetura documenta Bronze, "
         "Silver, Gold e Quarantine, além da camada semântica e dos contratos de dados."
+    )
+    st.subheader(
+        "From ingestion to publication" if is_en else "Da ingestão à publicação"
+    )
+    st.markdown(
+        """
+1. **Bronze** preserves input for traceability; **Silver** standardizes data and applies contracts.
+2. **Quarantine** isolates invalid records. **Gold** provides validated facts for joins and aggregation.
+3. The **semantic layer** computes GMV, orders and cohort retention. The **Publication Gate** evaluates release evidence, separately from the authorization to distribute exact bytes.
+"""
+        if is_en
+        else """
+1. **Bronze** preserva as entradas para rastreabilidade; **Silver** padroniza os dados e aplica contratos.
+2. **Quarantine** isola registros inválidos. **Gold** disponibiliza fatos validados para junções e agregações.
+3. A **camada semântica** calcula GMV, pedidos e retenção. O **Publication Gate** avalia evidências de liberação, separadamente da autorização de distribuição dos bytes.
+"""
     )
     st.markdown(
         f"- [{'Layers and quarantine' if is_en else 'Camadas e quarentena'}]"
@@ -40,13 +56,13 @@ def render_about(locale: Locale) -> None:
     )
     st.header("Developer" if is_en else "Sobre o desenvolvedor")
     st.write(
-        "Samuel Maia — Data Engineer II at Avanade. GAP is his independent portfolio project."
+        "Samuel Maia — Data Engineer II at Avanade. He develops GAP independently for his portfolio, outside Avanade's product portfolio."
         if is_en
-        else "Samuel Maia — Engenheiro de Dados Pleno na Avanade. O GAP é seu projeto independente de portfólio."
+        else "Samuel Maia — Engenheiro de Dados Pleno na Avanade. Ele desenvolve o GAP de forma independente para seu portfólio pessoal, fora do catálogo de produtos da Avanade."
     )
     st.link_button("GitHub", PUBLIC_REPOSITORY, icon=":material/code:")
     st.link_button(
         "Professional portfolio" if is_en else "Portfólio profissional",
-        "https://samuelmaia-analytics.github.io/samuelmaia-analytics/",
+        "https://samuelmaia-analytics.com.br",
         icon=":material/person:",
     )
