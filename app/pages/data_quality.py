@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -39,7 +40,7 @@ _COLUMN_LABELS = {
 _CHART_COLUMN_LABELS = {
     "estimated_delay_days": "Desvio do prazo",
     "order_delivered_customer_date": "Data de entrega",
-    "carrier_delivery_time_days": "Entrega transportadora",
+    "carrier_delivery_time_days": "Prazo da transportadora",
     "delivery_time_days": "Tempo de entrega",
     "product_category_name_english": "Categoria (inglês)",
     "product_category_name": "Categoria produto",
@@ -102,8 +103,7 @@ def _display_column_name(value: object) -> str:
 
 def _display_chart_column_name(value: object) -> str:
     technical_name = str(value)
-    fallback = " ".join(technical_name.split("_")[:3]).capitalize()
-    return _CHART_COLUMN_LABELS.get(technical_name, fallback)
+    return _CHART_COLUMN_LABELS.get(technical_name, _display_column_name(value))
 
 
 def _display_affected_columns(value: object) -> object:
@@ -217,7 +217,8 @@ def render_data_quality(
             "Score de qualidade", f"{quality_score} / 100" if total_checks else "—"
         )
     st.caption(
-        "O score resume o resultado das validações técnicas do cenário demonstrativo."
+        "O score de 100/100 indica que nenhuma regra configurada foi reprovada. "
+        "Os dados ainda podem conter valores nulos quando as regras os permitem."
     )
 
     st.markdown("### Leitura executiva")
@@ -240,6 +241,9 @@ def render_data_quality(
             null_profile.rename(
                 columns={"column_name": "Campo", "null_pct": "Nulos (%)"}
             ),
+            column_config={
+                "Nulos (%)": st.column_config.NumberColumn(format="%.2f %%")
+            },
             width="stretch",
             hide_index=True,
         )
@@ -247,42 +251,70 @@ def render_data_quality(
         display_null_profile = incomplete_fields.head(20).assign(
             column_label=incomplete_fields["column_name"].map(
                 _display_chart_column_name
-            )
+            ),
+            formatted_pct=incomplete_fields["null_pct"].map(
+                lambda value: f"{value:.2f}".replace(".", ",") + " %"
+            ),
         )
         st.markdown("### Percentual de valores nulos por campo")
-        st.bar_chart(
-            display_null_profile,
-            x="column_label",
-            y="null_pct",
-            x_label="Percentual de valores nulos",
-            y_label="Campo",
-            horizontal=True,
-            sort=False,
-            height=max(220, min(620, 45 * len(display_null_profile) + 80)),
+        st.caption(
+            f"Cada percentual usa as {_format_integer(quality_results['total_rows'])} "
+            "linhas avaliadas como denominador."
         )
+        null_chart = (
+            alt.Chart(display_null_profile)
+            .mark_bar(cornerRadiusEnd=3, orient="horizontal")
+            .encode(
+                x=alt.X(
+                    "null_pct:Q",
+                    title="Percentual de valores nulos (%)",
+                    axis=alt.Axis(tickCount=5, labelExpr="replace(datum.label, '.', ',')"),
+                ),
+                y=alt.Y(
+                    "column_label:N",
+                    title="Campo",
+                    sort=display_null_profile["column_label"].tolist(),
+                    axis=alt.Axis(labelLimit=125, labelPadding=6, labelOverlap=False),
+                ),
+                tooltip=[
+                    alt.Tooltip("column_label:N", title="Campo"),
+                    alt.Tooltip("column_name:N", title="Nome técnico"),
+                    alt.Tooltip("formatted_pct:N", title="Valores nulos"),
+                ],
+            )
+            .properties(height=100 + 28 * len(display_null_profile))
+        )
+        st.altair_chart(null_chart, width="stretch")
 
-    status_df = (
-        quality_table.get("status", pd.Series(dtype="string"))
-        .value_counts()
-        .reset_index()
-    )
-    status_df.columns = ["status", "count"]
-    display_status = status_df.assign(
-        status_label=status_df["status"].map(
-            lambda value: _STATUS_LABELS.get(str(value).upper(), str(value))
-        )
-    )
     st.markdown("### Resultado das validações")
-    st.bar_chart(
-        display_status,
-        x="status_label",
-        y="count",
-        x_label="Quantidade",
-        y_label="Status",
-        horizontal=True,
-        sort=False,
-        height=220,
-    )
+    if "status" in quality_table and total_checks:
+        display_status = pd.DataFrame(
+            {
+                "status": list(_STATUS_LABELS),
+                "status_label": list(_STATUS_LABELS.values()),
+                "count": [pass_count, warn_count, fail_count],
+            }
+        )
+        status_chart = (
+            alt.Chart(display_status)
+            .mark_bar(cornerRadiusEnd=3, orient="horizontal")
+            .encode(
+                x=alt.X("count:Q", title="Quantidade", axis=alt.Axis(tickMinStep=1)),
+                y=alt.Y(
+                    "status_label:N",
+                    title="Status",
+                    sort=list(_STATUS_LABELS.values()),
+                    axis=alt.Axis(labelPadding=6, labelOverlap=False),
+                ),
+                tooltip=[
+                    alt.Tooltip("status_label:N", title="Status"),
+                    alt.Tooltip("status:N", title="Código"),
+                    alt.Tooltip("count:Q", title="Quantidade", format="d"),
+                ],
+            )
+            .properties(height=180)
+        )
+        st.altair_chart(status_chart, width="stretch")
 
     st.markdown("### Falhas por severidade crítica, alta ou média")
     if {"status", "severity"}.issubset(quality_table.columns):

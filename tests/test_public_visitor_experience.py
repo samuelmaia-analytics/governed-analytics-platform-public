@@ -81,7 +81,7 @@ def test_public_governance_displays_actual_blocked_gate_despite_passed_checks(
 
 def test_quality_with_no_nulls_keeps_evidence_without_empty_null_chart(monkeypatch):
     chart = Mock()
-    monkeypatch.setattr(st, "bar_chart", chart)
+    monkeypatch.setattr(st, "altair_chart", chart)
     app = AppTest.from_string(
         "import pandas as pd\n"
         "from app.pages.data_quality import render_data_quality\n"
