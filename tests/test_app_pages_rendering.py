@@ -1177,7 +1177,7 @@ def test_portfolio_overview_prioritizes_value_kpis_and_navigation(
         value for kind, value in calls if kind == "markdown" and "gap-hero" in value
     )
     assert "<h1>Governed Analytics Platform</h1>" in hero
-    assert "Engenharia de Dados, Qualidade e Governança" in hero
+    assert "Desempenho de marketplace com dados auditáveis" in hero
     assert metrics[:7] == [
         ("Registros analisados", "2"),
         ("Data Quality Score", "100 / 100"),
@@ -1408,7 +1408,7 @@ def test_portfolio_overview_navigation_keeps_governance_links(
         value for kind, value in calls if kind == "markdown" and "gap-hero" in value
     )
     assert "<h1>Governed Analytics Platform</h1>" in hero
-    assert "Engenharia de Dados, Qualidade e Governança" in hero
+    assert "Desempenho de marketplace com dados auditáveis" in hero
     assert metric_labels[:7] == [
         "Registros analisados",
         "Data Quality Score",
@@ -1621,7 +1621,7 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         "Top sellers por receita",
     ]
     assert any("três meses completos consecutivos" in caption for caption in captions)
-    assert any("62,5% do total" in caption for caption in captions)
+    assert any("2 (100,00% acumulado)" in caption for caption in captions)
     assert any("análise de cohort" in caption for caption in captions)
 
     monthly_plot = figures[0]
@@ -1634,7 +1634,7 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
     category_plot = next(
         (frame, kwargs)
         for kind, frame, kwargs in plot_calls
-        if kind == "bar" and kwargs["x"] == "category"
+        if kind == "bar" and kwargs["y"] == "category"
     )
     assert "title" not in category_plot[1]
     assert {kwargs["title"] for _, _, kwargs in plot_calls if "title" in kwargs} == {

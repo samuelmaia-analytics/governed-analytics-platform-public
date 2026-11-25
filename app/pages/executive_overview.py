@@ -144,16 +144,16 @@ def render_executive_hero(locale: Locale, *, public_mode: bool) -> None:
     if public_mode:
         label += " · Synthetic data" if is_en else " · Dados sintéticos"
     lead = (
-        "Data engineering, quality and governance for trusted decisions."
+        "Marketplace performance with auditable data."
         if is_en
-        else "Engenharia de Dados, Qualidade e Governança para decisões confiáveis."
+        else "Desempenho de marketplace com dados auditáveis."
     )
     description = (
-        "Follow the path from ingestion to analytics and see how data teams "
-        "validate records, track findings and control publication."
+        "Explore revenue, seller performance and customer retention. "
+        "Use the governance views to verify the checks behind the numbers."
         if is_en
-        else "Acompanhe o caminho da ingestão à análise e veja como equipes de dados "
-        "validam registros, rastreiam achados e controlam a publicação."
+        else "Explore receita, desempenho de sellers e retenção de clientes. "
+        "Confira na governança as validações que sustentam os indicadores."
     )
     st.markdown(
         f"""
@@ -332,29 +332,36 @@ def render_executive_overview(
             else "Verificação atual de qualidade e autorização da amostra sintética."
         )
 
-    st.header("Publication evidence" if is_en else "Evidências de publicação")
-    render_metric_cards(
-        [
-            {"label": "Publication Gate", "value": publication_status},
-            {
-                "label": "Data contracts" if is_en else "Contratos de dados",
-                "value": contracts_status,
-            },
-        ],
-        max_columns=2,
-    )
-    if snapshot is None:
-        st.info(
-            "No recorded decision for this input. The Publication Gate page explains the available evidence."
+    if public_mode:
+        st.caption(
+            "Historical pipeline evidence is restricted to the controlled environment."
             if is_en
-            else "Sem decisão registrada para este dataset. Consulte as evidências disponíveis no Publication Gate."
+            else "As evidências históricas do pipeline ficam no ambiente controlado."
         )
     else:
-        st.caption(
-            "Recorded evidence from the published dataset."
-            if is_en
-            else "Evidência registrada do dataset publicado."
+        st.header("Publication evidence" if is_en else "Evidências de publicação")
+        render_metric_cards(
+            [
+                {"label": "Publication Gate", "value": publication_status},
+                {
+                    "label": "Data contracts" if is_en else "Contratos de dados",
+                    "value": contracts_status,
+                },
+            ],
+            max_columns=2,
         )
+        if snapshot is None:
+            st.info(
+                "No recorded decision for this input. The Publication Gate page explains the available evidence."
+                if is_en
+                else "Sem decisão registrada para este dataset. Consulte as evidências disponíveis no Publication Gate."
+            )
+        else:
+            st.caption(
+                "Recorded evidence from the published dataset."
+                if is_en
+                else "Evidência registrada do dataset publicado."
+            )
 
     render_governed_flow(locale)
 
@@ -467,7 +474,7 @@ def render_executive_overview(
                 delta_color="inverse",
             )
             st.metric(
-                "Governance Status" if is_en else "Status de governan\u00e7a", status
+                "Quality diagnostics" if is_en else "Diagnóstico de qualidade", status
             )
 
         extra_col1, extra_col2, extra_col3 = st.columns(3)
@@ -477,14 +484,20 @@ def render_executive_overview(
                 freshness
                 if freshness
                 else (
-                    "N/A - pipeline not run"
-                    if is_en
-                    else "N/A - pipeline n\u00e3o executado"
+                    (
+                        "Unavailable in public view"
+                        if is_en
+                        else "Indisponível no perfil público"
+                    )
+                    if public_mode
+                    else unavailable
                 ),
             )
         with extra_col2:
             st.metric(
-                "Suppressed Columns (LGPD)" if is_en else "Colunas suprimidas (LGPD)",
+                "Fields with recommended protection"
+                if is_en
+                else "Campos com proteção recomendada",
                 suppressed_columns,
                 help=(
                     "Columns with action: anonymize, remove or pseudonymize."

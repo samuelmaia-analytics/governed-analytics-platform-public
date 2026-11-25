@@ -13,8 +13,8 @@ def render_about(locale: Locale) -> None:
         "GAP is an independent portfolio project. Its public demo uses synthetic data "
         "to demonstrate how quality and publication controls reduce the risk of analysis based on incomplete data or unauthorized distribution."
         if is_en
-        else "O GAP é um projeto independente de portfólio. A demonstração pública usa "
-        "dados sintéticos para demonstrar como controles de qualidade e publicação reduzem o risco de análises com dados incompletos ou de distribuição sem autorização."
+        else "O GAP é um projeto independente de portfólio sobre operação de marketplace. "
+        "A experiência pública usa uma amostra sintética para demonstrar análises de receita, sellers e retenção com controles de qualidade e publicação."
     )
     st.header("Architecture and validation" if is_en else "Arquitetura e validação")
     st.write(

@@ -124,13 +124,9 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     del locale
     st.title("Desempenho de Sellers")
     st.markdown(
-        "Visão de volume, experiência logística e contribuição estimada dos "
-        "sellers no cenário analítico demonstrativo."
+        "Visão de volume de pedidos, desempenho de entrega e contribuição dos sellers."
     )
-    st.caption(
-        "Os indicadores combinam pedidos, atraso, tempo de entrega e receita "
-        "estimada para apoiar a comparação de desempenho entre sellers."
-    )
+    st.caption("Compare sellers por faixa de volume e estado.")
     st.markdown("### Como interpretar esta página")
     st.write(
         "Use os filtros para comparar grupos de sellers por volume e localização. "
@@ -216,6 +212,9 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     )
 
     st.markdown("### Leitura executiva")
+    st.caption(
+        "A taxa de atraso e o tempo de entrega dão o mesmo peso a cada seller da seleção."
+    )
     if not public_mode:
         st.caption("A soma por seller pode contar o mesmo pedido em mais de um seller.")
     st.markdown(
@@ -267,22 +266,38 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         display_sla = sla.assign(
             tier_label=sla["seller_volume_tier"].map(_display_tier)
         )
-        fig_sla = px.bar(
-            display_sla,
-            x="avg_delay_rate",
-            y="tier_label",
-            color="avg_delay_rate",
-            orientation="h",
-            title="Taxa média de atraso por faixa de volume",
-            labels={
-                "avg_delay_rate": "Taxa média de atraso (%)",
-                "tier_label": "Faixa de volume",
-            },
-            hover_data={"seller_volume_tier": True, "tier_label": False},
-        )
-        fig_sla.update_layout(margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_sla, width="stretch")
+        if (
+            public_mode
+            and sla["avg_delay_rate"].notna().all()
+            and sla["avg_delay_rate"].eq(0).all()
+        ):
+            st.markdown("#### Atrasos por faixa de volume")
+            st.info("Nenhum atraso registrado nas faixas da seleção.")
+        else:
+            _render_delay_by_tier(display_sla)
 
+    _render_seller_ranking(filtered)
+
+
+def _render_delay_by_tier(display_sla: pd.DataFrame) -> None:
+    fig_sla = px.bar(
+        display_sla,
+        x="avg_delay_rate",
+        y="tier_label",
+        color="avg_delay_rate",
+        orientation="h",
+        title="Taxa média de atraso por faixa de volume",
+        labels={
+            "avg_delay_rate": "Taxa média de atraso (%)",
+            "tier_label": "Faixa de volume",
+        },
+        hover_data={"seller_volume_tier": True, "tier_label": False},
+    )
+    fig_sla.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    st.plotly_chart(fig_sla, width="stretch")
+
+
+def _render_seller_ranking(filtered: pd.DataFrame) -> None:
     ranking = filtered.copy()
     exact_gmv = "gross_item_value" in ranking
     if exact_gmv:

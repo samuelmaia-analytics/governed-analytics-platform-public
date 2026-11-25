@@ -313,30 +313,56 @@ def _render_category_pareto(category_slice: pd.DataFrame, locale: Locale) -> Non
         .sort_values("revenue", ascending=False)
     )
     category["category"] = category["product_category_name_english"].fillna("unknown")
+    if is_public_visitor_mode():
+        prefix = "Product group" if is_en else "Grupo de produtos"
+        aliases = {
+            f"synthetic_category_{i}": f"{prefix} {letter}"
+            for i, letter in enumerate("ABCDE")
+        }
+        category["category"] = category["category"].replace(aliases)
     total_revenue = float(category["revenue"].sum())
     if total_revenue > 0:
         category["cum_pct"] = (category["revenue"].cumsum() / total_revenue) * 100
     else:
         category["cum_pct"] = 0.0
 
-    pareto_cutoff = int((category["cum_pct"] <= 80).sum())
-    pareto_cutoff = max(1, pareto_cutoff)
-
-    st.subheader("Concentração de receita por categoria")
+    st.subheader(
+        "Revenue concentration" if is_en else "Concentração de receita por categoria"
+    )
+    if is_public_visitor_mode():
+        st.caption(
+            "Groups A–E identify categories in the synthetic sample."
+            if is_en
+            else "Os grupos A–E identificam as categorias da amostra sintética."
+        )
     fig = px.bar(
         category.head(15),
-        x="category",
-        y="revenue",
-        labels={"category": "Categoria", "revenue": "Receita (R$)"},
+        x="revenue",
+        y="category",
+        orientation="h",
+        labels={
+            "category": "Category" if is_en else "Categoria",
+            "revenue": "GMV (R$)",
+        },
     )
-    fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), xaxis_tickangle=-35)
+    fig.update_layout(
+        margin=dict(l=12, r=12, t=12, b=12),
+        height=max(240, 32 * min(15, len(category)) + 60),
+        yaxis=dict(autorange="reversed", title=None),
+        xaxis=dict(tickprefix="R$ "),
+    )
     st.plotly_chart(fig, width="stretch")
-    concentration = f"{category['cum_pct'].iloc[pareto_cutoff - 1]:.1f}".replace(
+    # Include the first category that reaches the threshold.
+    pareto_cutoff = int(category["cum_pct"].lt(80).argmin()) + 1
+    concentration = f"{category['cum_pct'].iloc[pareto_cutoff - 1]:.2f}".replace(
         ".", ","
     )
-    st.caption(
-        f"As {pareto_cutoff} categorias de maior receita concentram {concentration}% do total."
-    )
+    if total_revenue > 0:
+        st.caption(
+            f"Categories needed to reach 80% of GMV: {pareto_cutoff} ({concentration.replace(',', '.')}%)."
+            if is_en
+            else f"Categorias necessárias para atingir 80% do GMV: {pareto_cutoff} ({concentration}% acumulado)."
+        )
     display_category = category[["category", "revenue", "cum_pct"]].rename(
         columns={
             "category": "Categoria",

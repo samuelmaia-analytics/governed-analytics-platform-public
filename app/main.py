@@ -332,7 +332,7 @@ def main() -> None:
                 title=("Seller Performance" if is_en else "Seller Performance"),
             )
         ),
-        title=("Seller Performance" if is_en else "Seller Performance"),
+        title=("Seller Performance" if is_en else "Desempenho de sellers"),
         icon=":material/storefront:",
         url_path="seller-performance",
     )
@@ -345,7 +345,7 @@ def main() -> None:
                 title=("Cohort Retention" if is_en else "Cohort Retention"),
             )
         ),
-        title=("Cohort Retention" if is_en else "Cohort Retention"),
+        title=("Cohort Retention" if is_en else "Retenção de clientes"),
         icon=":material/grid_view:",
         url_path="cohort-retention",
     )
