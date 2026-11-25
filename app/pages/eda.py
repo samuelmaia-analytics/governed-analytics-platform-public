@@ -164,7 +164,13 @@ def _present_descriptive_statistics(
     presentation.index.name = "Variable" if locale == LOCALE_EN_US else "Variável"
     presentation = presentation.reset_index()
     if locale != LOCALE_EN_US:
-        presentation = presentation.rename(columns=_DESCRIPTIVE_LABELS_PT)
+        temporal_labels = {
+            f"{key}_temporal": f"{label} (temporal)"
+            for key, label in _DESCRIPTIVE_LABELS_PT.items()
+        }
+        presentation = presentation.rename(
+            columns=_DESCRIPTIVE_LABELS_PT | temporal_labels
+        )
     return presentation
 
 
