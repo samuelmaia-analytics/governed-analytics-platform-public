@@ -149,7 +149,7 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
     markdown_calls: list[str] = []
     captions: list[str] = []
     metrics: list[tuple[str, object]] = []
-    bar_charts: list[tuple[pd.DataFrame | pd.Series, dict[str, object]]] = []
+    charts: list[dict[str, object]] = []
     displayed_frames: list[pd.DataFrame] = []
     dataframe_options: list[dict[str, object]] = []
     expanders: list[str] = []
@@ -172,8 +172,8 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
         def columns(self, count: int):  # type: ignore[no-untyped-def]
             return tuple(CapturingContainer() for _ in range(count))
 
-        def bar_chart(self, data: pd.DataFrame | pd.Series, **kwargs: object) -> None:
-            bar_charts.append((data.copy(), kwargs))
+        def altair_chart(self, chart, **_kwargs) -> None:
+            charts.append(chart.to_dict())
 
         def dataframe(self, frame: pd.DataFrame, **kwargs: object) -> None:
             displayed_frames.append(frame.copy())
@@ -305,56 +305,38 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
     assert ("Score de qualidade", "50 / 100") in metrics
     assert errors == ["Falhas críticas ou altas"]
 
-    status_chart, status_chart_options = next(
-        (chart, options)
-        for chart, options in bar_charts
-        if isinstance(chart, pd.DataFrame) and "status_label" in chart.columns
-    )
-    assert status_chart["status"].tolist() == ["PASS", "FAIL"]
-    assert status_chart["status_label"].tolist() == ["APROVADO", "FALHA"]
-    assert status_chart["count"].tolist() == [16, 5]
-    assert status_chart_options == {
-        "x": "status_label",
-        "y": "count",
-        "x_label": "Quantidade",
-        "y_label": "Status",
-        "horizontal": True,
-        "sort": False,
-        "height": 220,
-    }
+    null_spec, status_spec = charts
+    status_rows = next(iter(status_spec["datasets"].values()))
+    assert [(row["status"], row["count"]) for row in status_rows] == [
+        ("PASS", 16),
+        ("WARN", 0),
+        ("FAIL", 5),
+    ]
+    status_encoding = status_spec["encoding"]
+    assert status_encoding["x"]["field"] == "count"
+    assert status_encoding["x"]["title"] == "Quantidade"
+    assert status_encoding["y"]["field"] == "status_label"
+    assert status_encoding["y"]["title"] == "Status"
     assert "### Resultado das validações" in markdown_calls
-    null_chart, null_chart_options = next(
-        (chart, options)
-        for chart, options in bar_charts
-        if isinstance(chart, pd.DataFrame) and "column_label" in chart.columns
-    )
-    assert null_chart["column_name"].tolist() == [
-        name for name, pct in original_null_pct.items() if pct > 0
-    ]
-    assert null_chart["null_pct"].tolist() == [
-        pct for pct in original_null_pct.values() if pct > 0
-    ]
-    assert null_chart["column_label"].tolist() == [
-        "Desvio do prazo",
-        "Data de entrega",
-        "Entrega transportadora",
-        "Tempo de entrega",
-        "Categoria (inglês)",
-        "Categoria produto",
-        "Despacho seller",
-        "Avaliação média",
-        "Entrega média seller",
-    ]
-    assert all(not label.endswith(("...", "…")) for label in null_chart["column_label"])
-    assert null_chart_options == {
-        "x": "column_label",
-        "y": "null_pct",
-        "x_label": "Percentual de valores nulos",
-        "y_label": "Campo",
-        "horizontal": True,
-        "sort": False,
-        "height": max(220, min(620, 45 * len(null_chart) + 80)),
+
+    null_rows = next(iter(null_spec["datasets"].values()))
+    assert {row["column_name"]: row["null_pct"] for row in null_rows} == {
+        name: pct for name, pct in original_null_pct.items() if pct > 0
     }
+    assert null_rows[0]["formatted_pct"] == "2,18 %"
+    assert any("112.650 linhas avaliadas" in caption for caption in captions)
+    assert any("100/100 indica" in caption for caption in captions)
+    assert any(row["column_label"] == "Prazo da transportadora" for row in null_rows)
+    null_encoding = null_spec["encoding"]
+    assert null_encoding["x"]["field"] == "null_pct"
+    assert null_encoding["x"]["title"] == "Percentual de valores nulos (%)"
+    assert null_encoding["y"]["field"] == "column_label"
+    assert null_encoding["y"]["title"] == "Campo"
+    assert [item["field"] for item in null_encoding["tooltip"]] == [
+        "column_label",
+        "column_name",
+        "formatted_pct",
+    ]
     assert "### Percentual de valores nulos por campo" in markdown_calls
 
     executive_table = next(
@@ -411,10 +393,12 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
     assert quality_results["null_pct_by_column"] == original_null_pct
     pd.testing.assert_frame_equal(quality_table, original_quality_table)
 
-    no_severity_table = pd.DataFrame([{"status": "PASS"}])
+    no_severity_table = pd.DataFrame([{"status": "PASS"}, {"status": "WARN"}])
     data_quality_page.render_data_quality(
         quality_results, no_severity_table, locale="pt-BR"
     )  # type: ignore[arg-type]
+
+    assert [row["count"] for row in next(iter(charts[-1]["datasets"].values()))] == [1, 1, 0]
 
 
 def test_render_lgpd_privacy_risk_with_and_without_metadata(monkeypatch) -> None:
