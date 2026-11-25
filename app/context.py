@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -40,6 +41,22 @@ class GovernanceAppContext:
     report_paths: dict[str, Path]
     uses_persisted_governance: bool = False
     public_distribution_gate: OperationalPublicationGateDecision | None = None
+
+
+def configure_public_profile() -> None:
+    """Honor root Streamlit secrets whose TOML booleans are not exported."""
+    if is_public_visitor_mode():
+        return
+    try:
+        for name in ("GAP_PUBLIC_VISITOR_MODE", "GAP_PUBLIC_DEMO_MODE"):
+            value = st.secrets.get(name)
+            if value is True or (
+                isinstance(value, str) and value.strip().lower() == "true"
+            ):
+                os.environ["GAP_PUBLIC_VISITOR_MODE"] = "true"
+                return
+    except FileNotFoundError:
+        pass
 
 
 def _render_data_freshness_sidebar(locale: Locale) -> None:

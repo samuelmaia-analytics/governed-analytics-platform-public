@@ -9,7 +9,10 @@ from typing import Any
 import streamlit as st
 
 from app.components.cards import render_metric_cards
+from app.i18n import LOCALE_EN_US, Locale
 from src.config import PUBLISHED_MONITORING_DIR, QUALITY_DIR
+from src.public_mode import is_public_visitor_mode
+from src.publication_gate import OperationalPublicationGateDecision
 
 PUBLICATION_DECISION_PATH = PUBLISHED_MONITORING_DIR / "publication_decision.json"
 SHADOW_TELEMETRY_PATH = (
@@ -214,9 +217,89 @@ def _score_value(score: int | None) -> str:
     return str(score) if score is not None else "Não persistido"
 
 
+def _render_public_controls(
+    gate: OperationalPublicationGateDecision | None, locale: Locale
+) -> None:
+    is_en = locale == LOCALE_EN_US
+    st.header("Publication Governance")
+    st.subheader("Implemented controls" if is_en else "Controles implementados")
+    st.markdown(
+        """
+1. **Quality** — session rules evaluate the sample's structure and business constraints.
+2. **Privacy and contracts** — classification, contract validation and controlled pipeline evidence address separate risks.
+3. **Public distribution** — the loader checks the dataset path, SHA-256, audience, purpose and revocation before loading any rows.
+"""
+        if is_en
+        else """
+1. **Qualidade** — regras da sessão avaliam a estrutura e restrições de negócio da amostra.
+2. **Privacidade e contratos** — classificação, avaliação de contratos e evidências do pipeline controlado tratam riscos distintos.
+3. **Distribuição pública** — o carregador verifica caminho, SHA-256, audiência, finalidade e revogação antes de abrir qualquer linha.
+"""
+    )
+    st.subheader("Session result" if is_en else "Resultado da sessão")
+    if gate is None:
+        st.info(
+            "No operational decision was evaluated for an available sample."
+            if is_en
+            else "Sem amostra disponível para avaliar a decisão operacional."
+        )
+    else:
+        decision = (
+            gate.decision.replace("_", " ").title()
+            if is_en
+            else {
+                "APPROVED": "Aprovado",
+                "APPROVED_WITH_WARNINGS": "Aprovado com alertas",
+                "BLOCKED": "Bloqueado",
+            }[gate.decision]
+        )
+        render_metric_cards(
+            [
+                {
+                    "label": "Operational decision" if is_en else "Decisão operacional",
+                    "value": decision,
+                },
+                {
+                    "label": "Checks passed" if is_en else "Checks aprovados",
+                    "value": f"{gate.pass_checks}/{gate.total_checks}",
+                },
+                {
+                    "label": "Failed checks" if is_en else "Checks reprovados",
+                    "value": str(gate.fail_checks),
+                },
+            ],
+            max_columns=3,
+        )
+        if gate.decision == "BLOCKED":
+            st.write(gate.reason)
+        else:
+            st.write(
+                "The operational decision combines the current quality checks with a valid public distribution grant for this exact artifact."
+                if is_en
+                else "A decisão operacional combina os checks de qualidade da sessão com uma autorização de distribuição pública válida para este exato artefato."
+            )
+    st.caption(
+        "A quality score does not grant authorization. The readiness assessment also considers privacy, contracts and freshness; these signals can restrict another publication."
+        if is_en
+        else "O score de qualidade não concede autorização. A avaliação de prontidão também considera privacidade, contratos e freshness; esses sinais podem restringir outra publicação."
+    )
+    st.subheader("Historical evidence" if is_en else "Evidências históricas")
+    st.write(
+        "Recorded decisions, execution provenance and operational freshness are assessed in a controlled environment. In the visitor profile, consult the Evidence & Traceability page for authorized documentation."
+        if is_en
+        else "Decisões registradas, proveniência e freshness operacional são avaliadas em ambiente controlado. No perfil visitante, consulte Evidências e rastreabilidade para acessar a documentação autorizada."
+    )
+
+
 def render_publication_governance(
     snapshot: PublicationGovernanceSnapshot | None = None,
+    *,
+    public_gate: OperationalPublicationGateDecision | None = None,
+    locale: Locale = "pt-BR",
 ) -> None:
+    if is_public_visitor_mode():
+        _render_public_controls(public_gate, locale)
+        return
     snapshot = snapshot or load_publication_governance_snapshot()
 
     st.header("Publication Governance")

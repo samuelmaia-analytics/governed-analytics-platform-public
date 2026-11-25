@@ -59,7 +59,8 @@ Repository configuration:
 - Main file path: `app/main.py`
 
 Secrets:
-- Configure secrets in the Streamlit Cloud dashboard (never commit secrets).
+- Set the root Streamlit Cloud secret `GAP_PUBLIC_VISITOR_MODE = true` in the dashboard. The entrypoint accepts the TOML boolean and activates the visitor profile before loading the dataset.
+- Never commit secrets.
 
 Notes:
 - The Community Cloud runtime overrides some Streamlit config options (consult Streamlit official docs).

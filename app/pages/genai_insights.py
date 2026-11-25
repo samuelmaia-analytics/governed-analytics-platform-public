@@ -78,11 +78,28 @@ def _load_genai_features() -> pd.DataFrame:
 
 
 def render_genai_insights(locale: Locale) -> None:
-    if is_public_visitor_mode():
-        st.info("GenAI inputs are not available in the public visitor profile." if locale == LOCALE_EN_US else "Recursos de GenAI não estão disponíveis no perfil público.")
-        return
     is_en = locale == LOCALE_EN_US
     st.title("Generative AI Experiment" if is_en else "Experimento de IA Generativa")
+    if is_public_visitor_mode():
+        st.write(
+            "The project implements product text attribute extraction and a separate governance assistant based on documentary evidence."
+            if is_en
+            else "O projeto implementa extração de atributos de textos de produtos e um assistente separado de governança baseado em evidências documentais."
+        )
+        st.markdown(
+            """
+- **Attribute extraction** — the controlled pipeline persists structured results. The viewer does not run inference.
+- **Local RAG** — TF-IDF retrieves excerpts from a manifest-approved corpus. Unsupported questions receive an abstention.
+- **External provider** — optional in a controlled environment with explicit consent. Public pages show the architecture without loading extraction artifacts or invoking providers.
+"""
+            if is_en
+            else """
+- **Extração de atributos** — o pipeline controlado materializa os resultados estruturados. O visualizador não executa inferência.
+- **RAG local** — o TF-IDF recupera trechos de fontes definidas em manifesto; perguntas sem evidência recebem uma abstenção.
+- **Provedor externo** — opcional no ambiente controlado e sujeito a consentimento explícito. As páginas públicas apresentam a arquitetura sem carregar artefatos de extração ou chamar provedores.
+"""
+        )
+        return
     st.markdown(
         "Exploration of structured attributes extracted from product text and "
         "previously materialized by the pipeline."

@@ -213,7 +213,9 @@ def render_data_quality(
     with col6:
         st.metric("Total de colunas", _format_integer(quality_results["total_columns"]))
     with col7:
-        st.metric("Score de qualidade", f"{quality_score} / 100" if total_checks else "—")
+        st.metric(
+            "Score de qualidade", f"{quality_score} / 100" if total_checks else "—"
+        )
     st.caption(
         "O score resume o resultado das validações técnicas do cenário demonstrativo."
     )
@@ -230,9 +232,22 @@ def render_data_quality(
         list(quality_results["null_pct_by_column"].items()),
         columns=["column_name", "null_pct"],
     ).sort_values("null_pct", ascending=False)
-    if not null_profile.empty:
-        display_null_profile = null_profile.head(20).assign(
-            column_label=null_profile["column_name"].map(_display_chart_column_name)
+    incomplete_fields = null_profile.loc[null_profile["null_pct"].gt(0)]
+    if not null_profile.empty and incomplete_fields.empty:
+        st.markdown("### Percentual de valores nulos por campo")
+        st.info("Nenhum valor nulo encontrado nos campos avaliados.")
+        st.dataframe(
+            null_profile.rename(
+                columns={"column_name": "Campo", "null_pct": "Nulos (%)"}
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+    elif not incomplete_fields.empty:
+        display_null_profile = incomplete_fields.head(20).assign(
+            column_label=incomplete_fields["column_name"].map(
+                _display_chart_column_name
+            )
         )
         st.markdown("### Percentual de valores nulos por campo")
         st.bar_chart(
@@ -243,10 +258,14 @@ def render_data_quality(
             y_label="Campo",
             horizontal=True,
             sort=False,
-            height=620,
+            height=max(220, min(620, 45 * len(display_null_profile) + 80)),
         )
 
-    status_df = quality_table["status"].value_counts().reset_index()
+    status_df = (
+        quality_table.get("status", pd.Series(dtype="string"))
+        .value_counts()
+        .reset_index()
+    )
     status_df.columns = ["status", "count"]
     display_status = status_df.assign(
         status_label=status_df["status"].map(
@@ -281,7 +300,9 @@ def render_data_quality(
             )
 
     st.markdown("### Resultado diagnóstico de qualidade")
-    st.caption("Score = 100 menos 10 pontos por falha, com mínimo zero. Consulte o Publication Gate para a decisão de publicação.")
+    st.caption(
+        "Score = 100 menos 10 pontos por falha, com mínimo zero. Consulte o Publication Gate para a decisão de publicação."
+    )
     if total_checks == 0:
         st.info("Sem resultados de validação.")
     elif critical_fail_count or high_fail_count:

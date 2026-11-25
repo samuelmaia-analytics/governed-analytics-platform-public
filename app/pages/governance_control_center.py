@@ -768,10 +768,16 @@ def render_governance_control_center(
         _presentation_label(governance_status, _STATUS_LABELS_PT_BR, is_en=is_en),
     )
     decision_col2.metric(
-        "Publication Readiness" if is_en else "Resultado do publication gate",
+        "Publication Readiness" if is_en else "Prontidão para publicação",
         _presentation_label(gate_result.decision, _STATUS_LABELS_PT_BR, is_en=is_en),
     )
 
+    if is_public_visitor_mode():
+        st.info(
+            "This readiness diagnosis considers privacy, contracts and freshness in addition to quality. Historical contract and freshness evidence is unavailable to visitors. See Publication Gate for the current sample's operational decision."
+            if is_en
+            else "A prontidão considera privacidade, contratos e freshness além da qualidade. Evidências históricas de contrato e freshness não estão disponíveis ao visitante. Consulte Publication Gate para a decisão operacional da amostra atual."
+        )
     st.markdown("## Diagnosis" if is_en else "## Diagnóstico")
     st.caption(
         "The summarized diagnosis and the publication gate are different mechanisms."
