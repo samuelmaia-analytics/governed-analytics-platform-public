@@ -6,7 +6,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app import context
-from app.pages import genai_insights, governance_assistant, publication_governance
+from app.pages import genai_insights, publication_governance
 
 
 @pytest.mark.parametrize("flag", ["GAP_PUBLIC_VISITOR_MODE", "GAP_PUBLIC_DEMO_MODE"])
@@ -22,11 +22,6 @@ def test_toml_boolean_enables_public_profile_before_loading_data(monkeypatch, fl
 @pytest.mark.parametrize(
     ("module", "renderer", "blocked_calls"),
     [
-        (
-            governance_assistant,
-            "render_governance_assistant('pt-BR')",
-            ("load_corpus", "answer_question", "_prepare_provider_flags"),
-        ),
         (genai_insights, "render_genai_insights('pt-BR')", ("_load_genai_features",)),
         (
             publication_governance,

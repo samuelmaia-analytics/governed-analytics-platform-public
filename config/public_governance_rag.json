@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "files": {
+    "docs/public-rag/data-contracts.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "5ca45535d56ec985f78d0a77f6c2469e64b8d5502bf2736731dfa497364b4884"
+    },
+    "docs/public-rag/data-quality.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "5bc448e65b85703969594623ccf273f95e1b0d183fe027fcd7280d08d088cfc6"
+    },
+    "docs/public-rag/layers.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "2f7dbfe82fb0b92a1c894671cbace1ea131a25ffaa6f02ec3b751cf6504a38b8"
+    },
+    "docs/public-rag/lgpd.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "36b41fb614c8ccc5b9b5ea269c4cf85ae7da3ace37f47814f66a95e54c8f9d7d"
+    },
+    "docs/public-rag/publication-gate.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "bd77a03081b8686a8968d90e829c84f47b0c736affe305354ca74540049eccb5"
+    },
+    "docs/public-rag/quarantine.md": {
+      "version": 1,
+      "audience": "public",
+      "purpose": "public_governance_rag",
+      "status": "Approved",
+      "publication_authorized": true,
+      "sha256": "0e735d5cf6268e9a813e2f39baf2d3068c9a25f2052bee41346a235f75d03fc6"
+    }
+  }
+}

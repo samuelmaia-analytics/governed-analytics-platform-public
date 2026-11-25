@@ -15,6 +15,7 @@ from urllib import request
 
 import yaml
 
+from src.public_mode import is_public_visitor_mode
 from src.settings import env_flag, load_app_settings
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -132,6 +133,10 @@ class Corpus:
     notices: tuple[str, ...]
 
 
+def contains_sensitive_content(text: str) -> bool:
+    return _SENSITIVE.search(text) is not None
+
+
 def document_digest(raw: bytes) -> str:
     return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
 
@@ -230,6 +235,8 @@ def _source_path(root: Path, relative: object) -> Path:
 
 
 def load_corpus(root: Path = PROJECT_ROOT, manifest: Path = MANIFEST_PATH) -> Corpus:
+    if is_public_visitor_mode():
+        raise RagError("The controlled corpus is unavailable in visitor mode.")
     try:
         spec = yaml.safe_load(manifest.read_text(encoding="utf-8"))
         if not isinstance(spec, dict) or spec.get("version") != 1:
@@ -334,7 +341,9 @@ class LocalIndex:
         norm = math.sqrt(sum(value * value for value in vector.values()))
         return {token: value / norm for token, value in vector.items()} if norm else {}
 
-    def retrieve(self, question: str, *, top_k: int = 5) -> tuple[Hit, ...]:
+    def retrieve(
+        self, question: str, *, top_k: int = 5, min_term_coverage: float = 0.4
+    ) -> tuple[Hit, ...]:
         if (
             not isinstance(question, str)
             or len(question) > MAX_QUESTION_CHARS
@@ -361,7 +370,7 @@ class LocalIndex:
             if any(run_id not in chunk.text.lower() for run_id in run_ids):
                 continue
             overlap = terms & content_terms
-            if len(overlap) < 2 or len(overlap) / len(terms) < 0.4:
+            if len(overlap) < 2 or len(overlap) / len(terms) < min_term_coverage:
                 continue
             score = sum(
                 value * embedding.get(token, 0) for token, value in vector.items()
@@ -376,6 +385,8 @@ class LocalIndex:
 
 
 def _openai_evidence(question: str, hits: tuple[Hit, ...]) -> list[dict[str, str]]:
+    if is_public_visitor_mode():
+        raise RagError("External providers are unavailable in visitor mode.")
     if any(
         Path(hit.chunk.source).parts
         and Path(hit.chunk.source).parts[0] in _LOCAL_ONLY_ROOTS
@@ -464,11 +475,13 @@ def answer_question(
         raise RagError("Use uma pergunta de ate 2000 caracteres.")
     if mode not in {"local", "openai"}:
         raise RagError("Modo de resposta invalido.")
+    if mode == "openai" and is_public_visitor_mode():
+        raise RagError("External providers are unavailable in visitor mode.")
     if mode == "openai" and consent is not True:
         raise RagError(
             "Confirme a autorizacao para enviar a pergunta e os trechos ao provedor."
         )
-    if _SENSITIVE.search(question):
+    if contains_sensitive_content(question):
         raise RagError("Remova dados pessoais ou credenciais da pergunta.")
     hits = index.retrieve(question)
     if not hits:
