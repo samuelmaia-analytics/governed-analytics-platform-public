@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from app.components.analytics import cohort_retention, valid_item_grain
@@ -21,8 +23,10 @@ def _load_semantic_slice(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _format_brl(value: float) -> str:
+def _format_brl(value: float, *, is_en: bool = False) -> str:
     formatted = f"{value:,.2f}"
+    if is_en:
+        return f"R$ {formatted}"
     return f"R$ {formatted.replace(',', '_').replace('.', ',').replace('_', '.')}"
 
 
@@ -100,79 +104,192 @@ def _render_executive_kpis(df: pd.DataFrame) -> None:
         )
 
 
+@dataclass(frozen=True)
+class MonthlyRevenue:
+    data: pd.DataFrame
+    first_purchase: pd.Timestamp | None
+    last_purchase: pd.Timestamp | None
+    undated_items: int
+    undated_revenue: float
+
+
+def _build_monthly_revenue(df: pd.DataFrame) -> MonthlyRevenue:
+    first = last = None
+    if "order_purchase_timestamp" in df:
+        dates = pd.to_datetime(df["order_purchase_timestamp"], errors="coerce")
+        if dates.notna().any():
+            first, last = pd.Timestamp(dates.min()), pd.Timestamp(dates.max())
+        months = dates.dt.tz_localize(None).dt.to_period("M")
+    elif "order_year_month" in df:
+        labels = df["order_year_month"].astype("string")
+        valid = labels.str.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", na=False)
+        months = pd.to_datetime(
+            labels.where(valid), format="%Y-%m", errors="coerce"
+        ).dt.to_period("M")
+    elif {"order_year", "order_month"}.issubset(df.columns):
+        year = pd.to_numeric(df["order_year"], errors="coerce")
+        month = pd.to_numeric(df["order_month"], errors="coerce")
+        valid = year.mod(1).eq(0) & month.mod(1).eq(0)
+        months = pd.to_datetime(
+            {"year": year.where(valid), "month": month.where(valid), "day": 1},
+            errors="coerce",
+        ).dt.to_period("M")
+    else:
+        months = pd.Series(pd.NaT, index=df.index, dtype="period[M]")
+
+    amounts = pd.to_numeric(df["total_item_value"], errors="coerce").replace(
+        [float("inf"), float("-inf")], float("nan")
+    )
+    undated = months.isna()
+    undated_items = int(undated.sum())
+    undated_revenue = float(amounts[undated].sum())
+    revenue = amounts.groupby(months).sum(min_count=1)
+    if revenue.empty:
+        return MonthlyRevenue(
+            pd.DataFrame(), first, last, undated_items, undated_revenue
+        )
+
+    calendar = pd.period_range(revenue.index.min(), revenue.index.max(), freq="M")
+    monthly = revenue.reindex(calendar).rename("revenue").to_frame()
+    monthly["partial"] = False
+    monthly["unverified_boundary"] = False
+    if first is not None and last is not None:
+        monthly.loc[calendar[0], "partial"] = not first.is_month_start
+        monthly.loc[calendar[-1], "partial"] |= not last.is_month_end
+    else:
+        monthly["unverified_boundary"] = monthly.index.isin([calendar[0], calendar[-1]])
+    complete = monthly["revenue"].mask(
+        monthly["partial"] | monthly["unverified_boundary"]
+    )
+    previous = complete.shift()
+    monthly["mom"] = (
+        (complete.div(previous.where(previous.ne(0))) - 1)
+        .mul(100)
+        .replace([float("inf"), float("-inf")], float("nan"))
+    )
+    monthly["moving_average"] = complete.rolling(3, min_periods=3).mean()
+    return MonthlyRevenue(monthly, first, last, undated_items, undated_revenue)
+
+
 def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
     is_en = locale == LOCALE_EN_US
-    if "total_item_value" not in df.columns:
+    if "total_item_value" not in df:
         st.info(
-            "Colunas necessárias não encontradas para série temporal."
-            if not is_en
-            else "Required columns for time series were not found."
+            "Revenue column unavailable."
+            if is_en
+            else "Coluna de receita indisponível."
         )
         return
-
-    working_df = df.copy()
-    if "order_purchase_timestamp" in working_df:
-        dates = pd.to_datetime(working_df["order_purchase_timestamp"], errors="coerce")
-        working_df["order_year_month"] = dates.dt.to_period("M").dt.strftime("%Y-%m")
-        first, last = dates.min(), dates.max()
-        if pd.notna(first) and pd.notna(last):
-            st.caption(f"Datas observadas: {first:%d/%m/%Y} a {last:%d/%m/%Y}.")
-            if not first.is_month_start or not last.is_month_end:
-                st.caption(
-                    "A série inclui mês de borda parcial; compare períodos equivalentes."
-                )
-    if "order_year_month" not in working_df.columns:
-        if {"order_year", "order_month"}.issubset(working_df.columns):
-            year = pd.to_numeric(working_df["order_year"], errors="coerce")
-            month = pd.to_numeric(working_df["order_month"], errors="coerce")
-            working_df["order_year_month"] = pd.to_datetime(
-                {"year": year, "month": month, "day": 1}, errors="coerce"
-            ).dt.strftime("%Y-%m")
-        else:
-            st.info(
-                "Colunas temporais necessárias não encontradas para série mensal."
-                if not is_en
-                else "Temporal columns required for monthly trend were not found."
-            )
-            return
-
-    valid_months = (
-        working_df["order_year_month"]
-        .astype("string")
-        .str.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", na=False)
-    )
-    missing_months = int((~valid_months).sum())
-    if missing_months:
+    result = _build_monthly_revenue(df)
+    monthly = result.data
+    if result.undated_items:
+        amount = _format_brl(result.undated_revenue, is_en=is_en)
+        count = f"{result.undated_items:,}"
         st.caption(
-            f"{missing_months:,} itens sem mês válido foram omitidos da série mensal."
+            f"Excluded from the chart due to an invalid or missing purchase month: {count} items ({amount})."
+            if is_en
+            else f"Itens omitidos do gráfico por mês de compra inválido ou ausente: {count.replace(',', '.')} ({amount})."
         )
-    if not valid_months.any():
-        st.info("Série mensal indisponível.")
+    if monthly.empty or monthly["revenue"].isna().all():
+        st.info(
+            "Monthly revenue unavailable." if is_en else "Série mensal indisponível."
+        )
         return
 
-    monthly = (
-        working_df.loc[valid_months]
-        .groupby("order_year_month")["total_item_value"]
-        .sum(min_count=1)
-        .reset_index()
-    )
-    monthly = monthly.rename(columns={"total_item_value": "revenue"})
-    monthly = monthly.sort_values("order_year_month")
-    st.subheader("Evolução mensal da receita")
+    st.subheader("Monthly revenue" if is_en else "Evolução mensal da receita")
+    if result.first_purchase is not None and result.last_purchase is not None:
+        st.caption(
+            f"Observed dates: {result.first_purchase:%Y-%m-%d} to {result.last_purchase:%Y-%m-%d}."
+            if is_en
+            else f"Datas observadas: {result.first_purchase:%d/%m/%Y} a {result.last_purchase:%d/%m/%Y}."
+        )
+    else:
+        st.caption(
+            "The source provides month-level dates. Coverage of the first and last month cannot be verified."
+            if is_en
+            else "A fonte informa apenas o mês. A cobertura do primeiro e do último mês não pode ser verificada."
+        )
     st.caption(
-        "Permite visualizar crescimento, sazonalidade e mudanças de nível de "
-        "receita ao longo do período."
+        "Hatched bars mark partial months or unverified coverage. MoM compares two consecutive complete months with a nonzero prior value. "
+        "The moving average requires three consecutive complete months. Both calculations stop at gaps."
+        if is_en
+        else "Barras hachuradas indicam meses parciais ou com cobertura não verificada. O MoM compara dois meses completos consecutivos e exige receita anterior diferente de zero. "
+        "A média móvel exige três meses completos consecutivos. Lacunas interrompem os dois cálculos."
     )
-    fig = px.bar(
-        monthly,
-        x="order_year_month",
-        y="revenue",
-        labels={
-            "order_year_month": "Ano-mês",
-            "revenue": "Receita (R$)",
-        },
+    if is_public_visitor_mode():
+        st.caption(
+            "The data are synthetic and represent a demonstration scenario. Observed fluctuations and patterns should not be interpreted as proven seasonality in real sales."
+            if is_en
+            else "Os dados são sintéticos e representam um cenário demonstrativo. As oscilações e padrões observados não devem ser interpretados como sazonalidade comprovada de vendas reais."
+        )
+
+    unavailable = "Unavailable" if is_en else "Indisponível"
+    partial = "Partial month" if is_en else "Mês parcial"
+    unverified = "Coverage unverified" if is_en else "Cobertura não verificada"
+    monthly_label = "Monthly revenue" if is_en else "Receita mensal"
+    average_label = "3-month moving average" if is_en else "Média móvel de 3 meses"
+    mom_label = "MoM change" if is_en else "Variação MoM"
+    customdata = []
+    for month, row in monthly.iterrows():
+        mom = f"{row['mom']:+.1f}%" if pd.notna(row["mom"]) else unavailable
+        customdata.append(
+            [
+                str(month),
+                _format_brl(row["revenue"], is_en=is_en)
+                if pd.notna(row["revenue"])
+                else unavailable,
+                mom if is_en else mom.replace(".", ","),
+                _format_brl(row["moving_average"], is_en=is_en)
+                if pd.notna(row["moving_average"])
+                else unavailable,
+                f"<br>{partial}"
+                if row["partial"]
+                else f"<br>{unverified}"
+                if row["unverified_boundary"]
+                else "",
+            ]
+        )
+    hover = (
+        "<b>%{customdata[0]}</b>%{customdata[4]}<br>"
+        f"{monthly_label}: %{{customdata[1]}}<br>{mom_label}: %{{customdata[2]}}<br>"
+        f"{average_label}: %{{customdata[3]}}<extra></extra>"
     )
-    fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    x = monthly.index.astype(str) + "-01"
+    fig = go.Figure(
+        go.Bar(
+            x=x,
+            y=monthly["revenue"],
+            name=monthly_label,
+            marker=dict(
+                color="#467fb1",
+                pattern_shape=[
+                    "/" if flagged else ""
+                    for flagged in monthly["partial"] | monthly["unverified_boundary"]
+                ],
+            ),
+            customdata=customdata,
+            hovertemplate=hover,
+        )
+    )
+    fig.add_scatter(
+        x=x,
+        y=monthly["moving_average"],
+        name=average_label,
+        mode="lines+markers",
+        line=dict(color="#b75b16", width=3),
+        marker=dict(size=5),
+        connectgaps=False,
+        customdata=customdata,
+        hovertemplate=hover,
+    )
+    fig.update_layout(
+        margin=dict(l=12, r=12, t=12, b=12),
+        height=390,
+        legend=dict(orientation="h", yanchor="top", y=-0.14),
+        xaxis=dict(type="date", tickformat="%m/%Y", nticks=6, fixedrange=True),
+        yaxis=dict(tickprefix="R$ ", separatethousands=True, nticks=5, fixedrange=True),
+        separators=".," if is_en else ",.",
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -394,8 +511,8 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
 
     tab_evolution, tab_pareto, tab_cohort, tab_sellers = st.tabs(
         [
-            "Evolução da receita",
-            "Pareto por categoria",
+            "Revenue trend" if is_en else "Evolução da receita",
+            "Category Pareto" if is_en else "Pareto por categoria",
             "Cohort",
             "Top Sellers",
         ]
