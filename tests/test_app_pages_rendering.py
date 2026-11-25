@@ -1503,6 +1503,7 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
     captions: list[str] = []
     markdown_calls: list[str] = []
     plot_calls: list[tuple[str, pd.DataFrame, dict[str, object]]] = []
+    figures: list[object] = []
     displayed_frames: list[pd.DataFrame] = []
     dataframe_options: list[dict[str, object]] = []
 
@@ -1532,6 +1533,9 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         def tabs(self, tab_names):  # type: ignore[no-untyped-def]
             tabs.extend(tab_names)
             return tuple(CapturingContainer() for _ in tab_names)
+
+        def plotly_chart(self, figure, **_kwargs) -> None:
+            figures.append(figure)
 
         def dataframe(self, frame: pd.DataFrame, **kwargs: object) -> None:
             displayed_frames.append(frame.copy())
@@ -1616,21 +1620,17 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         "Concentração de receita por categoria",
         "Top sellers por receita",
     ]
-    assert any("sazonalidade" in caption for caption in captions)
+    assert any("três meses completos consecutivos" in caption for caption in captions)
     assert any("62,5% do total" in caption for caption in captions)
     assert any("análise de cohort" in caption for caption in captions)
 
-    monthly_plot = next(
-        (frame, kwargs)
-        for kind, frame, kwargs in plot_calls
-        if kind == "bar" and kwargs["x"] == "order_year_month"
-    )
-    assert monthly_plot[0]["revenue"].tolist() == [220.0, 200.0]
-    assert "title" not in monthly_plot[1]
-    assert monthly_plot[1]["labels"] == {
-        "order_year_month": "Ano-mês",
-        "revenue": "Receita (R$)",
-    }
+    monthly_plot = figures[0]
+    bars, moving_average = monthly_plot.data
+    assert list(bars.y) == [220.0, 200.0]
+    assert list(bars.x) == ["2024-01-01", "2024-02-01"]
+    assert moving_average.type == "scatter"
+    assert not moving_average.connectgaps
+    assert monthly_plot.layout.title.text is None
     category_plot = next(
         (frame, kwargs)
         for kind, frame, kwargs in plot_calls
