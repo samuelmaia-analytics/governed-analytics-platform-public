@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,25 @@ def dataset_overview(df: pd.DataFrame) -> dict[str, object]:
 
 def descriptive_statistics(df: pd.DataFrame) -> pd.DataFrame:
     summary = df.describe(include="all").transpose()
-    return summary.where(summary.notna(), "")
+    for column in summary.columns.intersection(["count", "unique", "freq"]):
+        summary[column] = summary[column].astype("Int64")
+    if "top" in summary:
+        summary["top"] = summary["top"].astype("string")
+
+    for column in summary.columns.intersection(
+        ["mean", "std", "min", "25%", "50%", "75%", "max"]
+    ):
+        values = summary[column]
+        temporal = (
+            values.map(lambda value: isinstance(value, (datetime, timedelta)))
+            & values.notna()
+        )
+        if temporal.any():
+            # Keep timestamps and durations separate from numeric statistics.
+            # Text preserves the original timezone and fractional precision for display.
+            summary[f"{column}_temporal"] = values.where(temporal).astype("string")
+        summary[column] = pd.to_numeric(values.mask(temporal)).astype("Float64")
+    return summary
 
 
 def dtype_distribution(df: pd.DataFrame) -> pd.DataFrame:
