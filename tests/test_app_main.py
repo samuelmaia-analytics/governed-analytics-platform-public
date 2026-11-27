@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import runpy
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -9,6 +11,18 @@ import pytest
 
 import app.context as context_module
 import app.main as main_module
+
+
+def test_root_entrypoint_uses_product_dashboard_in_public_mode(monkeypatch) -> None:
+    received: list[str] = []
+    monkeypatch.setenv("GAP_PUBLIC_VISITOR_MODE", "true")
+    monkeypatch.setattr(main_module, "main", lambda: received.append("public"))
+    monkeypatch.setattr(main_module.st, "navigation", pytest.fail)
+
+    root_entrypoint = Path(__file__).resolve().parents[1] / "app.py"
+    runpy.run_path(str(root_entrypoint), run_name="__main__")
+
+    assert received == ["public"]
 
 
 def test_import_app_main_module_without_errors() -> None:
@@ -256,8 +270,8 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
         "Publication Gate": "publication-governance",
         "LGPD e Privacidade": "lgpd-privacy-risk",
         "Data Quality": "data-quality",
-        "Seller Performance": "seller-performance",
-        "Cohort Retention": "cohort-retention",
+        "Desempenho de sellers": "seller-performance",
+        "Retenção de clientes": "cohort-retention",
         "Contratos e Cat\u00e1logo": "data-catalog",
         "An\u00e1lise Explorat\u00f3ria": "technical-analysis",
         "Evid\u00eancias e rastreabilidade": "governance-report",
@@ -277,8 +291,8 @@ def test_main_builds_navigation_and_runs_selected_page(monkeypatch) -> None:
     assert navigation_titles == [
         "Visão geral",
         "Indicadores analíticos",
-        "Seller Performance",
-        "Cohort Retention",
+        "Desempenho de sellers",
+        "Retenção de clientes",
         "Análise Exploratória",
         "Data Quality",
         "Contratos e Catálogo",

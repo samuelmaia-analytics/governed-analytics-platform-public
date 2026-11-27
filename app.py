@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(
-    page_title="Governed Analytics Platform",
-    page_icon=":material/policy:",
-    layout="wide",
-)
+from app.context import configure_public_profile
+from src.public_mode import is_public_visitor_mode
 
 
 def main() -> None:
+    configure_public_profile()
+    if is_public_visitor_mode():
+        from app.main import main as run_product_dashboard
+
+        run_product_dashboard()
+        return
+
+    st.set_page_config(
+        page_title="Governed Analytics Platform",
+        page_icon=":material/policy:",
+        layout="wide",
+    )
     pages = [
         st.Page("pages/01_Overview.py", title="Overview", icon=":material/dashboard:"),
         st.Page(

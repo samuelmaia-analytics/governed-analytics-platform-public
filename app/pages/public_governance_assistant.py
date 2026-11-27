@@ -130,7 +130,8 @@ def render_public_governance_assistant(locale: Locale) -> None:
         lines = "lines" if is_en else "linhas"
         version = "version" if is_en else "versão"
         with st.expander(
-            f"[{hit.citation}] {chunk.source.rsplit('/', 1)[-1]}", expanded=True
+            f"[{hit.citation}] {chunk.text.splitlines()[0].removeprefix('# ')}",
+            expanded=True,
         ):
             st.caption(
                 f"{chunk.source} · {lines} {chunk.start_line}–{chunk.end_line} · {version} {SOURCE_VERSION}"
