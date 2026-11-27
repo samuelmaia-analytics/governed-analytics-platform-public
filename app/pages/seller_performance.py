@@ -7,7 +7,7 @@ import plotly.express as px
 import streamlit as st
 
 from app.components.analytics import filtered_seller_order_count, valid_item_grain
-from app.i18n import Locale
+from app.i18n import LOCALE_EN_US, Locale
 from src.public_mode import is_public_visitor_mode
 from src.semantic_layer import build_seller_slice
 
@@ -19,6 +19,14 @@ _TIER_LABELS = {
     "scaled": "Em escala",
     "core": "Core",
     "strategic": "Estratégico",
+}
+
+_EN_TIER_LABELS = {
+    "all": "All",
+    "long_tail": "Long tail",
+    "scaled": "Scaled",
+    "core": "Core",
+    "strategic": "Strategic",
 }
 
 _RANKING_COLUMNS = [
@@ -125,15 +133,24 @@ def _build_executive_ranking(ranking: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) -> None:
-    del locale
-    st.title("Desempenho de Sellers")
+    is_en = locale == LOCALE_EN_US
+    st.title("Seller Performance" if is_en else "Desempenho de Sellers")
     st.markdown(
-        "Visão de volume de pedidos, desempenho de entrega e contribuição dos sellers."
+        "Compare order volumes, delivery performance, and seller contribution."
+        if is_en
+        else "Visão de volume de pedidos, desempenho de entrega e contribuição dos sellers."
     )
-    st.caption("Compare sellers por faixa de volume e estado.")
-    st.markdown("### Como interpretar esta página")
+    st.caption(
+        "Compare sellers by volume tier and state."
+        if is_en
+        else "Compare sellers por faixa de volume e estado."
+    )
+    st.markdown("### How to read this page" if is_en else "### Como interpretar esta página")
     st.write(
-        "Use os filtros para comparar grupos de sellers por volume e localização. "
+        "Use the filters to compare sellers by volume and location. "
+        "The metrics show order concentration, delivery performance, and seller contribution."
+        if is_en
+        else "Use os filtros para comparar grupos de sellers por volume e localização. "
         "Os indicadores ajudam a identificar concentração de pedidos, comportamento "
         "logístico e contribuição estimada."
     )
@@ -141,7 +158,11 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     public_mode = is_public_visitor_mode()
     if public_mode:
         if df is not None and not df.empty and not valid_item_grain(df):
-            st.warning("Desempenho indisponível: o grão pedido × item não é válido.")
+            st.warning(
+                "Seller performance is unavailable because order-item keys are invalid."
+                if is_en
+                else "Desempenho indisponível: o grão pedido × item não é válido."
+            )
             return
         seller_df = (
             build_seller_slice(df, observed_delivery_only=True)
@@ -151,9 +172,15 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     else:
         seller_df = _load_seller_slice()
     if seller_df.empty:
-        st.info("Dados de sellers não disponíveis neste ambiente.")
+        st.info(
+            "Seller data is unavailable in this environment."
+            if is_en
+            else "Dados de sellers não disponíveis neste ambiente."
+        )
         st.caption(
-            "A visualização depende do slice semântico de sellers gerado em uma "
+            "This view requires the seller slice produced by the governed pipeline."
+            if is_en
+            else "A visualização depende do slice semântico de sellers gerado em uma "
             "execução controlada."
         )
         return
@@ -167,15 +194,19 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
 
     f1, f2 = st.columns(2)
     selected_tier = f1.selectbox(
-        "Faixa de volume",
+        "Volume tier" if is_en else "Faixa de volume",
         options=tier_options,
-        format_func=_display_tier,
+        format_func=lambda value: _EN_TIER_LABELS.get(value, value)
+        if is_en
+        else _display_tier(value),
         key="seller_perf_tier_filter",
     )
     selected_state = f2.selectbox(
-        "Estado",
+        "State" if is_en else "Estado",
         options=state_options,
-        format_func=_display_filter_value,
+        format_func=lambda value: ("All" if value == "all" else value)
+        if is_en
+        else _display_filter_value(value),
         key="seller_perf_state_filter",
     )
 
@@ -186,7 +217,11 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         filtered = filtered[filtered["seller_state"] == selected_state]
 
     if filtered.empty:
-        st.warning("Nenhum seller encontrado para os filtros selecionados.")
+        st.warning(
+            "No sellers match the selected filters."
+            if is_en
+            else "Nenhum seller encontrado para os filtros selecionados."
+        )
         return
 
     seller_count = int(filtered["seller_key"].nunique())
@@ -204,14 +239,16 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     delivery_display = _format_delivery_days(avg_delivery_days)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Sellers ativos", _format_integer(seller_count))
+    m1.metric("Active sellers" if is_en else "Sellers ativos", _format_integer(seller_count))
     m2.metric(
-        "Pedidos únicos" if public_mode else "Pedidos por seller (soma)",
+        ("Unique orders" if public_mode else "Orders per seller (sum)")
+        if is_en
+        else ("Pedidos únicos" if public_mode else "Pedidos por seller (soma)"),
         _format_integer(order_count),
     )
-    m3.metric("Taxa média de atraso", delay_display)
+    m3.metric("Average late delivery rate" if is_en else "Taxa média de atraso", delay_display)
     m4.metric(
-        "Tempo médio de entrega",
+        "Average delivery time" if is_en else "Tempo médio de entrega",
         delivery_display,
     )
 

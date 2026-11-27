@@ -4,7 +4,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from app.i18n import Locale
+from app.i18n import LOCALE_EN_US, Locale
 from src.governance_types import DataQualityResult
 
 _STATUS_LABELS = {
@@ -151,19 +151,25 @@ def _format_integer(value: int) -> str:
 def render_data_quality(
     quality_results: DataQualityResult, quality_table: pd.DataFrame, locale: Locale
 ) -> None:
-    del locale
-    st.title("Qualidade dos Dados")
+    is_en = locale == LOCALE_EN_US
+    st.title("Data Quality" if is_en else "Qualidade dos Dados")
     st.markdown(
-        "Visão executiva dos controles de integridade, consistência e regras "
+        "Review the integrity, consistency, and business rule checks applied before publication."
+        if is_en
+        else "Visão executiva dos controles de integridade, consistência e regras "
         "de qualidade aplicados antes da publicação analítica."
     )
     st.caption(
-        "Os indicadores apresentados refletem validações técnicas do dataset "
+        "The indicators reflect technical checks on the demonstration dataset."
+        if is_en
+        else "Os indicadores apresentados refletem validações técnicas do dataset "
         "demonstrativo utilizado no projeto de portfólio."
     )
-    st.markdown("### Como interpretar esta página")
+    st.markdown("### How to read this page" if is_en else "### Como interpretar esta página")
     st.write(
-        "A página demonstra como a plataforma identifica falhas de integridade, "
+        "Use the results to see which checks passed and which need review before analytical use."
+        if is_en
+        else "A página demonstra como a plataforma identifica falhas de integridade, "
         "inconsistências e violações de regras antes que os dados sejam "
         "disponibilizados para consumo analítico."
     )
@@ -199,25 +205,29 @@ def render_data_quality(
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total de validações", _format_integer(total_checks))
+        st.metric("Total checks" if is_en else "Total de validações", _format_integer(total_checks))
     with col2:
-        st.metric("Aprovadas", _format_integer(pass_count))
+        st.metric("Passed" if is_en else "Aprovadas", _format_integer(pass_count))
     with col3:
-        st.metric("Alertas", _format_integer(warn_count))
+        st.metric("Warnings" if is_en else "Alertas", _format_integer(warn_count))
     with col4:
-        st.metric("Falhas", _format_integer(fail_count))
+        st.metric("Failed" if is_en else "Falhas", _format_integer(fail_count))
 
     col5, col6, col7 = st.columns(3)
     with col5:
-        st.metric("Total de linhas", _format_integer(quality_results["total_rows"]))
+        st.metric("Total rows" if is_en else "Total de linhas", _format_integer(quality_results["total_rows"]))
     with col6:
-        st.metric("Total de colunas", _format_integer(quality_results["total_columns"]))
+        st.metric("Total columns" if is_en else "Total de colunas", _format_integer(quality_results["total_columns"]))
     with col7:
         st.metric(
-            "Score de qualidade", f"{quality_score} / 100" if total_checks else "—"
+            "Quality score" if is_en else "Score de qualidade",
+            f"{quality_score} / 100" if total_checks else "—",
         )
     st.caption(
-        "O score de 100/100 indica que nenhuma regra configurada foi reprovada. "
+        "When no configured check fails, the score is 100/100. "
+        "Some checks allow missing values."
+        if is_en
+        else "O score de 100/100 indica que nenhuma regra configurada foi reprovada. "
         "Os dados ainda podem conter valores nulos quando as regras os permitem."
     )
 
