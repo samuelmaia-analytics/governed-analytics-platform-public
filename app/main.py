@@ -46,6 +46,9 @@ from app.pages.snowflake_explorer import render_snowflake_explorer  # noqa: E402
 from src.duckdb_engine import get_duckdb_version  # noqa: E402
 from src.public_mode import is_public_visitor_mode  # noqa: E402
 
+from app.pages.public_architecture import render_public_architecture  # noqa: E402
+from src.streamlit_architecture_view import architecture_view_enabled  # noqa: E402
+
 st.set_page_config(
     page_title="Governed Analytics Platform",
     page_icon=":material/policy:",
@@ -462,6 +465,20 @@ def main() -> None:
         ],
         ("Project" if is_en else "Projeto"): [about_page],
     }
+
+    if architecture_view_enabled():
+        sections["Architecture" if is_en else "Arquitetura"] = [
+            st.Page(
+                lambda: render_public_architecture("azure"),
+                title="Azure Architecture",
+                url_path="azure-architecture",
+            ),
+            st.Page(
+                lambda: render_public_architecture("aws"),
+                title="AWS Architecture",
+                url_path="aws-architecture",
+            ),
+        ]
 
     navigation = st.navigation(pages=sections, position="sidebar", expanded=True)
     navigation.run()
