@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import runpy
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -9,6 +11,18 @@ import pytest
 
 import app.context as context_module
 import app.main as main_module
+
+
+def test_root_entrypoint_uses_product_dashboard_in_public_mode(monkeypatch) -> None:
+    received: list[str] = []
+    monkeypatch.setenv("GAP_PUBLIC_VISITOR_MODE", "true")
+    monkeypatch.setattr(main_module, "main", lambda: received.append("public"))
+    monkeypatch.setattr(main_module.st, "navigation", pytest.fail)
+
+    root_entrypoint = Path(__file__).resolve().parents[1] / "app.py"
+    runpy.run_path(str(root_entrypoint), run_name="__main__")
+
+    assert received == ["public"]
 
 
 def test_import_app_main_module_without_errors() -> None:

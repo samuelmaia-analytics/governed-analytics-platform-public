@@ -1609,14 +1609,14 @@ def test_render_revenue_analytics_with_and_without_semantic_slices(monkeypatch) 
         ("Sellers ativos", "2"),
     ]
     assert tabs == [
-        "Evolução da receita",
+        "Evolução do GMV",
         "Pareto por categoria",
         "Cohort",
         "Top Sellers",
     ]
     assert "Leitura executiva" in " ".join(markdown_calls)
     assert subtitles == [
-        "Evolução mensal da receita",
+        "Evolução mensal do GMV",
         "Concentração de receita por categoria",
         "Top sellers por receita",
     ]

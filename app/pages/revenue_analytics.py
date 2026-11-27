@@ -196,7 +196,7 @@ def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
         )
         return
 
-    st.subheader("Monthly revenue" if is_en else "Evolução mensal da receita")
+    st.subheader("Monthly GMV" if is_en else "Evolução mensal do GMV")
     if result.first_purchase is not None and result.last_purchase is not None:
         st.caption(
             f"Observed dates: {result.first_purchase:%Y-%m-%d} to {result.last_purchase:%Y-%m-%d}."
@@ -226,7 +226,7 @@ def _render_monthly_revenue(df: pd.DataFrame, locale: Locale) -> None:
     unavailable = "Unavailable" if is_en else "Indisponível"
     partial = "Partial month" if is_en else "Mês parcial"
     unverified = "Coverage unverified" if is_en else "Cobertura não verificada"
-    monthly_label = "Monthly revenue" if is_en else "Receita mensal"
+    monthly_label = "Monthly GMV" if is_en else "GMV mensal"
     average_label = "3-month moving average" if is_en else "Média móvel de 3 meses"
     mom_label = "MoM change" if is_en else "Variação MoM"
     customdata = []
@@ -497,9 +497,9 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
     is_en = locale == LOCALE_EN_US
     st.title("Revenue and performance" if is_en else "Receita e performance")
     st.write(
-        "Track monthly revenue and see where sales concentrate by category and seller."
+        "Track monthly GMV and see where sales concentrate by category and seller."
         if is_en
-        else "Acompanhe a receita mensal e veja onde as vendas se concentram por categoria e seller."
+        else "Acompanhe o GMV mensal e veja onde as vendas se concentram por categoria e seller."
     )
     public_mode = is_public_visitor_mode()
     if public_mode:
@@ -519,7 +519,10 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
         )
         return
     st.caption(
-        "GMV = valor dos itens + frete, nos estados presentes na fonte. "
+        "GMV = item value + freight across all order statuses present in the source. "
+        "Average order value = GMV ÷ distinct orders."
+        if is_en
+        else "GMV = valor dos itens + frete, para todos os status de pedido presentes na fonte. "
         "Ticket por pedido = GMV ÷ pedidos distintos."
     )
     _render_executive_kpis(df)
@@ -537,7 +540,7 @@ def render_revenue_analytics(df: pd.DataFrame, locale: Locale) -> None:
 
     tab_evolution, tab_pareto, tab_cohort, tab_sellers = st.tabs(
         [
-            "Revenue trend" if is_en else "Evolução da receita",
+            "GMV trend" if is_en else "Evolução do GMV",
             "Category Pareto" if is_en else "Pareto por categoria",
             "Cohort",
             "Top Sellers",
