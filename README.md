@@ -1,36 +1,39 @@
 # Governed Analytics Platform
 
-Este pacote fonte reúne código, contratos e documentação de governança. Entradas Olist, recortes reais, exports Power BI, relatórios pendentes e CSVs históricos de testes ficam fora da distribuição.
+[Português](#governed-analytics-platform) · [English](#english)
 
-## Execução local e perfil público
+Dados inconsistentes podem chegar a relatórios executivos quando os critérios de qualidade, privacidade e publicação ficam separados do pipeline. Construí o GAP para verificar essas condições durante o processamento e registrar a decisão antes do consumo.
 
-Instale as dependências de `pyproject.toml` em um ambiente isolado e inicie a interface local com `python -m streamlit run app/main.py`. Sem os artefatos privados e o arquivo de amostra local, o perfil local pode usar dois registros sintéticos em memória. O pipeline completo requer entradas fornecidas separadamente e autorizadas para uso privado.
+**[Conheça o GAP no Streamlit](https://governed-analytics-platform.streamlit.app/)** · [Integração pública e checks](https://github.com/samuelmaia-analytics/governed-analytics-platform-public/pull/25)
 
-O perfil público, habilitado por `GAP_PUBLIC_VISITOR_MODE=true` (ou `GAP_PUBLIC_DEMO_MODE=true`), aceita a fixture sintética específica somente com autorização pública vigente para seus bytes. Sem a fixture ou a autorização, o carregamento fica bloqueado.
+## Como a plataforma funciona
 
-O navegador de documentos exige autorização de visitante, hash correspondente e ausência de revogação. A presença de um documento no ZIP não o habilita no navegador. A entrega de dados exige a autorização aplicável e o Publication Gate.
+O processamento implementado roda localmente em Python, SQL, dbt e DuckDB. As camadas Bronze, Silver, Gold e Quarantine separam a ingestão, a transformação, os resultados analíticos e as exceções. Contratos versionados descrevem schemas e regras. Testes de qualidade e reconciliação, lineage, controles de privacidade e evidências de execução sustentam as decisões do Publication Gate. O projeto também inclui uma aplicação Streamlit, uma API FastAPI e um assistente demonstrativo de governança com recuperação de fontes.
 
+O GitHub Actions verifica testes, lint, segurança, política e barreira de publicação. Os cinco checks passaram na integração pública das páginas arquiteturais.
 
-## Deploy no Streamlit Community Cloud
+## O que explorar na aplicação
 
-O repositório público é preparado para rodar no Streamlit Community Cloud sem depender do seu computador e sem usar Azure.
+As páginas Microsoft Azure e AWS distinguem o fluxo local implementado (**AS-IS**) das arquiteturas de referência propostas (**TO-BE**). A renderização visual foi confirmada pelo responsável na aplicação oficial. A verificação automatizada dos bytes entregues ao navegador, da navegação e da responsividade e um exercício de revogação em produção permanecem pendentes.
 
-1. Crie/edite o app no painel do Streamlit Cloud apontando para este repositório e para a branch desejada.
-2. Defina o arquivo principal como `app/main.py`.
-3. Defina a variável de ambiente `GAP_PUBLIC_VISITOR_MODE=true` (compatível também com `GAP_PUBLIC_DEMO_MODE=true`).
-4. Confirme que o dataset sintético autorizado está presente no caminho `data/samples/gap_public_demo_synthetic_v1.parquet`.
-   - SHA-256 autorizado: `9fe727d2e5f60ac8e2a9c7e6c4d979102882a11afa7874100c5705bcaa51a1c7`
-5. Mantenha o Publication Gate fail-closed: qualquer outro artefato continua bloqueado sem autorização explícita.
+A aplicação usa acesso de leitura com menor privilégio, valida o SHA-256 autorizado e consulta a política de revogação a cada entrega. Se o acesso, a integridade ou a política não puderem ser confirmados, a página mantém a descrição textual. A revogação bloqueia novas entregas. A visualização dos dois SVGs está autorizada exclusivamente no Streamlit oficial.
 
-Se o endereço `governed-analytics-platform.streamlit.app` ainda estiver disponível, ele pode ser reutilizado ao manter o mesmo nome de app no Streamlit Cloud.
+O Publication Gate de dados segue em **Needs Review**. A promoção e a distribuição de dados, os exports internos e os demais artefatos restritos permanecem bloqueados.
 
-## Arquitetura e testes
+## Execução e documentação
 
-A partir da raiz do pacote, consulte:
+Em um ambiente isolado com as dependências de `pyproject.toml`, execute `python -m streamlit run app/main.py`. A execução isolada usa somente amostras sintéticas disponíveis e autorizadas para o perfil aplicável. O pipeline completo requer insumos autorizados separadamente. Para testar o código, instale as dependências de desenvolvimento e execute `python -m pytest tests`.
 
 - [Camadas locais](docs/architecture/local_data_lake.md)
-- [Camada semântica](docs/architecture/semantic_layer.md)
 - [Contratos de dados](docs/data_contracts.md)
-- [Escopo do pacote](docs/governance/public_scope.md)
+- [Escopo público](docs/governance/public_scope.md)
 
-Com as dependências de desenvolvimento instaladas, execute `python -m pytest tests`. Os testes incluídos usam valores sintéticos. Publicar o histórico, mudar a visibilidade do repositório ou fazer deploy exige autorização própria.
+## English
+
+The GAP addresses a recurring analytics problem: inconsistent data can reach executive reports when quality, privacy and publication decisions are handled outside the pipeline. The implemented pipeline runs locally with Python, SQL, dbt and DuckDB. Versioned contracts, validation, reconciliation, lineage and privacy controls provide evidence for the Publication Gate. The project also includes Streamlit, FastAPI and a demonstration governance assistant.
+
+The [official Streamlit app](https://governed-analytics-platform.streamlit.app/) presents Microsoft Azure and AWS reference architectures. Each page distinguishes the implemented local workflow (**AS-IS**) from the proposed cloud design (**TO-BE**). The project owner confirmed visual rendering. Automated verification of browser-delivered bytes, navigation and responsive layouts, and a live revocation exercise remain pending. All five [public post-merge checks](https://github.com/samuelmaia-analytics/governed-analytics-platform-public/pull/25) passed.
+
+The app reads the two authorized SVGs with least-privilege access, checks the exact SHA-256 and consults the current revocation policy on each delivery. If access, integrity or authorization cannot be confirmed, the text alternative remains available. The data Publication Gate remains in **Needs Review**, with data promotion, distribution and restricted artifacts blocked.
+
+To run locally, install the dependencies declared in `pyproject.toml` in an isolated environment and run `python -m streamlit run app/main.py`. See the [public scope](docs/governance/public_scope.md) for distribution boundaries and `python -m pytest tests` for the test entry point.
