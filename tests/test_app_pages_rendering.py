@@ -289,7 +289,7 @@ def test_render_data_quality_covers_critical_and_noncritical_paths(monkeypatch) 
     original_quality_table = quality_table.copy(deep=True)
 
     data_quality_page.render_data_quality(
-        quality_results, quality_table, locale="en-US"
+        quality_results, quality_table, locale="pt-BR"
     )  # type: ignore[arg-type]
 
     assert titles == ["Qualidade dos Dados"]
@@ -495,8 +495,13 @@ def test_render_lgpd_privacy_risk_with_and_without_metadata(monkeypatch) -> None
         df, classification_df, risk_result, locale="pt-BR"
     )  # type: ignore[arg-type]
 
-    assert titles == ["Privacidade e Controles LGPD"] * 2
+    assert titles == ["LGPD Privacy and Controls", "Privacidade e Controles LGPD"]
     assert tab_groups[0] == [
+        "Risk score",
+        "Classifications",
+        "Transformation preview",
+    ]
+    assert tab_groups[2] == [
         "Score e risco",
         "Classificações",
         "Prévia de transformações",
@@ -506,6 +511,8 @@ def test_render_lgpd_privacy_risk_with_and_without_metadata(monkeypatch) -> None
     assert "### Como interpretar esta página" in markdown_calls
     assert any("riscos elevados" in message for message in info_calls)
     assert ("Score de risco de privacidade", "100 / 100") in metrics
+    assert ("Privacy risk score", "100 / 100") in metrics
+    assert ("Publication recommendation", "BLOCKED") in metrics
     assert ("Nível de risco", "ALTO") in metrics
     assert ("Recomendação de publicação", "BLOQUEADO") in metrics
     assert "Componentes técnicos do score" in expanders
@@ -1863,7 +1870,8 @@ def test_render_seller_performance_with_and_without_data(monkeypatch) -> None:
 
     monkeypatch.setattr(seller_page, "_load_seller_slice", lambda: pd.DataFrame())
     seller_page.render_seller_performance(locale="en-US")  # type: ignore[arg-type]
-    assert infos == ["Dados de sellers não disponíveis neste ambiente."]
+    assert titles[-1] == "Seller Performance"
+    assert infos == ["Seller data is unavailable in this environment."]
 
 
 def test_render_cohort_retention_with_and_without_data(monkeypatch) -> None:

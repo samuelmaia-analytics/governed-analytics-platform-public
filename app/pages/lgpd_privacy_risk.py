@@ -58,60 +58,73 @@ def render_lgpd_privacy_risk(
     locale: Locale,
 ) -> None:
     is_en = locale == LOCALE_EN_US
-    st.title("Privacidade e Controles LGPD")
+    st.title("LGPD Privacy and Controls" if is_en else "Privacidade e Controles LGPD")
     st.markdown(
-        "Visão demonstrativa dos riscos de privacidade, classificações de dados "
+        "Explore privacy risks, data classifications, and the controls applied by the analytics pipeline."
+        if is_en
+        else "Visão demonstrativa dos riscos de privacidade, classificações de dados "
         "e controles aplicados ao pipeline analítico."
     )
     st.caption(
-        "Os indicadores abaixo representam uma avaliação diagnóstica do cenário "
+        "These indicators assess the demonstration scenario. A legal assessment or a formal "
+        "data protection impact report is a separate process."
+        if is_en
+        else "Os indicadores abaixo representam uma avaliação diagnóstica do cenário "
         "demonstrativo e não substituem uma análise jurídica ou RIPD formal."
     )
-    st.markdown("### Como interpretar esta página")
+    st.markdown("### How to read this page" if is_en else "### Como interpretar esta página")
     st.write(
-        "A página demonstra como a plataforma identifica dados pessoais e "
+        "See how the platform classifies personal and sensitive data, scores privacy risk, "
+        "and recommends controls before publication."
+        if is_en
+        else "A página demonstra como a plataforma identifica dados pessoais e "
         "sensíveis, calcula risco de privacidade e aplica recomendações de "
         "governança antes da publicação analítica."
     )
 
     tab_risk, tab_classification, tab_preview = st.tabs(
         [
-            "Score e risco",
-            "Classificações",
-            "Prévia de transformações",
+            "Risk score" if is_en else "Score e risco",
+            "Classifications" if is_en else "Classificações",
+            "Transformation preview" if is_en else "Prévia de transformações",
         ]
     )
 
     with tab_risk:
-        st.subheader("Avaliação diagnóstica de privacidade")
+        st.subheader("Privacy risk assessment" if is_en else "Avaliação diagnóstica de privacidade")
         st.info(
-            "O cenário demonstrativo evidencia como a plataforma identifica "
+            "This scenario shows how the platform flags elevated risk and may recommend "
+            "blocking publication when the assessment has yet to account for protective controls."
+            if is_en
+            else "O cenário demonstrativo evidencia como a plataforma identifica "
             "riscos elevados e pode recomendar bloqueio de publicação quando "
             "controles de proteção ainda não estão considerados na avaliação."
         )
         col1, col2 = st.columns(2)
         with col1:
             st.metric(
-                "Score de risco de privacidade",
+                "Privacy risk score" if is_en else "Score de risco de privacidade",
                 f"{risk_result['score']} / 100",
             )
         with col2:
             st.metric(
-                "Nível de risco",
-                _display_label(risk_result["risk_level"], _RISK_LEVEL_LABELS),
+                "Risk level" if is_en else "Nível de risco",
+                risk_result["risk_level"].upper()
+                if is_en
+                else _display_label(risk_result["risk_level"], _RISK_LEVEL_LABELS),
             )
+        recommendation = risk_result.get("publication_recommendation", "needs_review")
         st.metric(
-            "Recomendação de publicação",
-            _display_label(
-                risk_result.get("publication_recommendation", "needs_review"),
-                _PUBLICATION_RECOMMENDATION_LABELS,
-            ),
+            "Publication recommendation" if is_en else "Recomendação de publicação",
+            recommendation.replace("_", " ").upper()
+            if is_en
+            else _display_label(recommendation, _PUBLICATION_RECOMMENDATION_LABELS),
         )
 
         components = risk_result.get("score_components", {})
         if components:
             with st.expander(
-                "Componentes técnicos do score",
+                "Score components" if is_en else "Componentes técnicos do score",
                 expanded=False,
             ):
                 st.dataframe(
@@ -124,9 +137,9 @@ def render_lgpd_privacy_risk(
                     width="stretch",
                 )
 
-        st.markdown("**Recomendações**")
+        st.markdown("**Recommendations**" if is_en else "**Recomendações**")
         for rec in risk_result["recommendations"]:
-            st.write(f"- {_display_recommendation(rec)}")
+            st.write(f"- {rec if is_en else _display_recommendation(rec)}")
 
     with tab_classification:
         class_counts = (

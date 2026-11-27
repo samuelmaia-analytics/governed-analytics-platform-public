@@ -48,29 +48,46 @@ def _format_month_offset(value: int | float) -> str:
 
 def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> None:
     is_en = locale == LOCALE_EN_US
-    st.title("Retenção de Clientes")
+    st.title("Customer Retention" if is_en else "Retenção de Clientes")
     st.subheader(
-        "Análise por cohorts para acompanhar a permanência de clientes ao longo "
+        "Track how many customers return in the months after their first purchase."
+        if is_en
+        else "Análise por cohorts para acompanhar a permanência de clientes ao longo "
         "dos meses após a primeira compra."
     )
     st.caption(
-        "A retenção compara, em cada cohort, a quantidade de clientes de cada mês "
+        "Each cohort compares the number of customers in a given month with its Month 0 population."
+        if is_en
+        else "A retenção compara, em cada cohort, a quantidade de clientes de cada mês "
         "relativo com o volume do mês inicial."
     )
-    st.markdown("### Como interpretar esta página")
+    st.markdown("### How to read this page" if is_en else "### Como interpretar esta página")
     st.write(
-        "Cada linha representa um grupo mensal de clientes e cada coluna representa "
+        "Each row groups customers by first purchase month. Columns count the months "
+        "since that purchase. Month 0 is the denominator for the cohort."
+        if is_en
+        else "Cada linha representa um grupo mensal de clientes e cada coluna representa "
         "o número de meses desde a primeira compra. O Mês 0 é o baseline de cada "
         "grupo e serve como denominador para o cálculo de retenção."
     )
     st.caption(
-        "Células vazias indicam combinação ausente, mês parcial ou população inicial indisponível."
+        "Blank cells indicate a missing combination, a partial month, or an unavailable baseline."
+        if is_en
+        else "Células vazias indicam combinação ausente, mês parcial ou população inicial indisponível."
     )
-    st.markdown("**Retenção = clientes no mês relativo ÷ clientes do Mês 0 × 100**")
+    st.markdown(
+        "**Retention = customers in the month ÷ Month 0 customers × 100**"
+        if is_en
+        else "**Retenção = clientes no mês relativo ÷ clientes do Mês 0 × 100**"
+    )
 
     if is_public_visitor_mode():
         if df is not None and not df.empty and not valid_item_grain(df):
-            st.warning("Retenção indisponível: o grão pedido × item não é válido.")
+            st.warning(
+                "Retention is unavailable because order-item keys are invalid."
+                if is_en
+                else "Retenção indisponível: o grão pedido × item não é válido."
+            )
             return
         cohort_df = (
             build_cohort_slice(df)
@@ -103,7 +120,7 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
     retention = cohort_retention(cohort_df)
     cohort_df = retention
     if cohort_df.empty:
-        st.info("Células de coorte indisponíveis.")
+        st.info("Cohort cells are unavailable." if is_en else "Células de coorte indisponíveis.")
         return
     ticket_column = (
         "avg_order_ticket" if "avg_order_ticket" in cohort_df else "avg_ticket"
@@ -122,13 +139,18 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
     calculable_cells = int(retention["retention_rate"].notna().sum())
 
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
-    metric_1.metric("Cohorts analisados", _format_integer(cohort_count))
-    metric_2.metric("Período analisado", f"{period_start} a {period_end}")
+    metric_1.metric("Cohorts analyzed" if is_en else "Cohorts analisados", _format_integer(cohort_count))
+    metric_2.metric(
+        "Observed period" if is_en else "Período analisado",
+        f"{period_start} to {period_end}" if is_en else f"{period_start} a {period_end}",
+    )
     metric_3.metric(
-        "Meses relativos representados", _format_integer(relative_month_count)
+        "Relative months covered" if is_en else "Meses relativos representados",
+        _format_integer(relative_month_count),
     )
     metric_4.metric(
-        "Células com retenção calculável", _format_integer(calculable_cells)
+        "Cells with observable retention" if is_en else "Células com retenção calculável",
+        _format_integer(calculable_cells),
     )
 
     st.markdown("### Leitura executiva")
@@ -220,7 +242,9 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
     )
     fig_ticket.update_yaxes(title_text="Cohort de compra")
 
-    retention_tab, ticket_tab = st.tabs(["Retenção", "Ticket médio"])
+    retention_tab, ticket_tab = st.tabs(
+        ["Retention", "Average value"] if is_en else ["Retenção", "Ticket médio"]
+    )
     with retention_tab:
         st.plotly_chart(fig_retention, width="stretch")
     with ticket_tab:
@@ -234,7 +258,7 @@ def render_cohort_retention(locale: Locale, df: pd.DataFrame | None = None) -> N
                 retention["retention_rate"].notna(), "purchase_cohort_month"
             ].unique()
         )
-        cohort_month = st.selectbox("Mês de aquisição", observable_cohorts)
+        cohort_month = st.selectbox("Acquisition month" if is_en else "Mês de aquisição", observable_cohorts)
         selected = retention.loc[retention["purchase_cohort_month"].eq(cohort_month)]
         max_offset = int(selected["cohort_order_month_number"].max())
         trend = selected.set_index("cohort_order_month_number").reindex(
