@@ -84,8 +84,23 @@ def build_logistics_slice(df: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
-def build_seller_slice(df: pd.DataFrame) -> pd.DataFrame:
+def build_seller_slice(
+    df: pd.DataFrame, *, observed_delivery_only: bool = False
+) -> pd.DataFrame:
     keys = ["seller_key", "seller_state", "seller_volume_tier"]
+    delivery_days = ("seller_avg_delivery_days", "max")
+    delay_rate = ("seller_delay_rate", "max")
+    if observed_delivery_only:
+        delivered = pd.to_datetime(df["order_delivered_customer_date"], errors="coerce")
+        estimated = pd.to_datetime(df["order_estimated_delivery_date"], errors="coerce")
+        # An item without both dates cannot establish whether its delivery was late.
+        df = df.assign(
+            observed_delay=delivered.gt(estimated).astype(float).where(
+                delivered.notna() & estimated.notna()
+            )
+        )
+        delivery_days = ("delivery_time_days", "mean")
+        delay_rate = ("observed_delay", "mean")
     seller = (
         df.dropna(subset=["seller_key"])
         .groupby(keys, dropna=False)
@@ -97,8 +112,8 @@ def build_seller_slice(df: pd.DataFrame) -> pd.DataFrame:
                 lambda amounts: amounts.sum(min_count=1),
             ),
             avg_ticket=("total_item_value", "mean"),
-            avg_delivery_time_days=("seller_avg_delivery_days", "max"),
-            delay_rate=("seller_delay_rate", "max"),
+            avg_delivery_time_days=delivery_days,
+            delay_rate=delay_rate,
             avg_review_score=("review_score_mean", "mean"),
         )
         .reset_index()

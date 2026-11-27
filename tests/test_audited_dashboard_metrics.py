@@ -73,6 +73,20 @@ def test_seller_value_and_filtered_distinct_orders_reconcile(fact):
         filtered_seller_order_count(fact, pd.concat([sp, sp]))
 
 
+def test_public_seller_delay_uses_only_observable_deliveries(fact):
+    fact["order_delivered_customer_date"] = pd.to_datetime(
+        ["2024-01-06", None, "2024-01-04", None, None, None, None]
+    )
+    fact["order_estimated_delivery_date"] = pd.Timestamp("2024-01-05")
+    fact["delivery_time_days"] = [5.0, None, 3.0, None, None, None, None]
+
+    sellers = build_seller_slice(fact, observed_delivery_only=True).set_index("seller_key")
+
+    assert sellers.loc["s1", "delay_rate"] == pytest.approx(0.5)
+    assert sellers.loc["s1", "avg_delivery_time_days"] == pytest.approx(4.0)
+    assert pd.isna(sellers.loc["s2", "delay_rate"])
+
+
 def test_cohort_counts_population_ticket_and_incomplete_window(fact):
     cohort = cohort_retention(build_cohort_slice(fact)).set_index(
         "cohort_order_month_number"

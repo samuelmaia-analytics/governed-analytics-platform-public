@@ -65,10 +65,14 @@ def _format_currency(value: int | float) -> str:
 
 
 def _format_percentage(value: int | float) -> str:
+    if pd.isna(value):
+        return "Indisponível"
     return f"{_format_decimal(float(value) * 100, 1)}%"
 
 
 def _format_delivery_days(value: int | float) -> str:
+    if pd.isna(value):
+        return "Indisponível"
     return f"{_format_decimal(float(value), 1)} dias"
 
 
@@ -140,7 +144,7 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
             st.warning("Desempenho indisponível: o grão pedido × item não é válido.")
             return
         seller_df = (
-            build_seller_slice(df)
+            build_seller_slice(df, observed_delivery_only=True)
             if df is not None and not df.empty
             else pd.DataFrame()
         )
@@ -192,12 +196,12 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
     if public_mode and df is not None:
         order_count = filtered_seller_order_count(df, filtered)
 
-    avg_delay_rate = (
-        float(pd.to_numeric(filtered["delay_rate"], errors="coerce").mean()) * 100
-    )
+    avg_delay_rate = float(pd.to_numeric(filtered["delay_rate"], errors="coerce").mean())
     avg_delivery_days = float(
         pd.to_numeric(filtered["avg_delivery_time_days"], errors="coerce").mean()
     )
+    delay_display = _format_percentage(avg_delay_rate)
+    delivery_display = _format_delivery_days(avg_delivery_days)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Sellers ativos", _format_integer(seller_count))
@@ -205,24 +209,28 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         "Pedidos únicos" if public_mode else "Pedidos por seller (soma)",
         _format_integer(order_count),
     )
-    m3.metric("Taxa média de atraso", f"{_format_decimal(avg_delay_rate, 1)}%")
+    m3.metric("Taxa média de atraso", delay_display)
     m4.metric(
         "Tempo médio de entrega",
-        f"{_format_decimal(avg_delivery_days, 1)} dias",
+        delivery_display,
     )
 
     st.markdown("### Leitura executiva")
     st.caption(
         "A taxa de atraso e o tempo de entrega dão o mesmo peso a cada seller da seleção."
     )
-    if not public_mode:
+    if public_mode:
+        st.caption(
+            "Por seller, o atraso usa itens com entrega realizada e data prevista. "
+            "O prazo médio usa itens com duração registrada."
+        )
+    else:
         st.caption("A soma por seller pode contar o mesmo pedido em mais de um seller.")
     st.markdown(
         f"- A seleção atual reúne **{_format_integer(seller_count)} sellers** e "
         f"**{_format_integer(order_count)} pedidos**.\n"
-        f"- A taxa média de atraso é **{_format_decimal(avg_delay_rate, 1)}%**.\n"
-        f"- O tempo médio de entrega é "
-        f"**{_format_decimal(avg_delivery_days, 1)} dias**."
+        f"- Taxa média de atraso **{delay_display}**.\n"
+        f"- Tempo médio de entrega **{delivery_display}**."
     )
 
     chart_left, chart_right = st.columns(2)
@@ -266,7 +274,10 @@ def render_seller_performance(locale: Locale, df: pd.DataFrame | None = None) ->
         display_sla = sla.assign(
             tier_label=sla["seller_volume_tier"].map(_display_tier)
         )
-        if (
+        if public_mode and sla["avg_delay_rate"].isna().all():
+            st.markdown("#### Atrasos por faixa de volume")
+            st.info("A seleção não tem entregas com datas suficientes para comparar atrasos.")
+        elif (
             public_mode
             and sla["avg_delay_rate"].notna().all()
             and sla["avg_delay_rate"].eq(0).all()
