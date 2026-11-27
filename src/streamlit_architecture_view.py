@@ -26,6 +26,7 @@ _FILES = {
 _MAX_BYTES = 256 * 1024
 _TIMEOUT = 4.0
 _RAW_TYPES = {
+    "application/vnd.github.raw+json",
     "application/octet-stream",
     "application/json",
     "image/svg+xml",
@@ -62,11 +63,10 @@ def _read_runtime_file(name: str, token: str) -> bytes:
     opener = build_opener(ProxyHandler({}), _NoRedirect())
     deadline = monotonic() + _TIMEOUT
     with opener.open(request, timeout=_TIMEOUT) as response:
-        if (
-            response.status != 200
-            or response.headers.get_content_type() not in _RAW_TYPES
-        ):
-            raise ValueError("Unexpected runtime response")
+        if response.status != 200:
+            raise ValueError("Unexpected runtime status")
+        if response.headers.get_content_type() not in _RAW_TYPES:
+            raise ValueError("Unexpected runtime media type")
         if response.headers.get("Content-Encoding", "identity").lower() != "identity":
             raise ValueError("Unexpected content encoding")
         declared = response.headers.get("Content-Length")

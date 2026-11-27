@@ -142,3 +142,12 @@ def test_unavailable_diagram_keeps_text_alternative(monkeypatch):
         node.value == "Diagram unavailable for this session." for node in app.info
     )
     assert any(item.label == "Accessible text alternative" for item in app.expander)
+
+
+def test_github_raw_vendor_media_type(runtime):
+    _, responses = runtime
+    responses[:] = [
+        Response(PAYLOAD, media="application/vnd.github.raw+json; charset=utf-8"),
+        Response(ALLOW, media="application/vnd.github.raw+json; charset=utf-8"),
+    ]
+    assert view.read_architecture_view("azure") == PAYLOAD
