@@ -1,6 +1,6 @@
 # Governed Analytics Platform
 
-[Português](#governed-analytics-platform) · [English](#english)
+[Português](#governed-analytics-platform) · [English](#english) · [Portfólio / Portfolio](https://www.samuelmaia-analytics.com.br/)
 
 Dados inconsistentes podem chegar a relatórios executivos quando os critérios de qualidade, privacidade e publicação ficam separados do pipeline. Construí o GAP para verificar essas condições durante o processamento e registrar a decisão antes do consumo, permitindo que equipes técnicas investiguem inconsistências e compreendam por que um dado pode seguir para publicação ou precisa ser retido.
 
