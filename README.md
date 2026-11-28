@@ -2,7 +2,7 @@
 
 [Português](#governed-analytics-platform) · [English](#english)
 
-Dados inconsistentes podem chegar a relatórios executivos quando os critérios de qualidade, privacidade e publicação ficam separados do pipeline. Construí o GAP para verificar essas condições durante o processamento e registrar a decisão antes do consumo.
+Dados inconsistentes podem chegar a relatórios executivos quando os critérios de qualidade, privacidade e publicação ficam separados do pipeline. Construí o GAP para verificar essas condições durante o processamento e registrar a decisão antes do consumo, permitindo que equipes técnicas investiguem inconsistências e compreendam por que um dado pode seguir para publicação ou precisa ser retido.
 
 **[Conheça o GAP no Streamlit](https://governed-analytics-platform.streamlit.app/)** · [Integração pública e checks](https://github.com/samuelmaia-analytics/governed-analytics-platform-public/pull/25)
 
@@ -10,7 +10,7 @@ Dados inconsistentes podem chegar a relatórios executivos quando os critérios 
 
 O processamento implementado roda localmente em Python, SQL, dbt e DuckDB. As camadas Bronze, Silver, Gold e Quarantine separam a ingestão, a transformação, os resultados analíticos e as exceções. Contratos versionados descrevem schemas e regras. Testes de qualidade e reconciliação, lineage, controles de privacidade e evidências de execução sustentam as decisões do Publication Gate. O projeto também inclui uma aplicação Streamlit, uma API FastAPI e um assistente demonstrativo de governança com recuperação de fontes.
 
-O GitHub Actions verifica testes, lint, segurança, política e barreira de publicação. Os cinco checks passaram na integração pública das páginas arquiteturais.
+A decisão de publicação tem critérios explícitos para aprovar, revisar ou bloquear um dado, em vez de depender apenas de uma execução concluída sem erros. O GitHub Actions verifica testes, lint, segurança, política e barreira de publicação. Os cinco checks passaram na integração pública das páginas arquiteturais.
 
 ## O que explorar na aplicação
 
@@ -30,7 +30,7 @@ Em um ambiente isolado com as dependências de `pyproject.toml`, execute `python
 
 ## English
 
-The GAP addresses a recurring analytics problem: inconsistent data can reach executive reports when quality, privacy and publication decisions are handled outside the pipeline. The implemented pipeline runs locally with Python, SQL, dbt and DuckDB. Versioned contracts, validation, reconciliation, lineage and privacy controls provide evidence for the Publication Gate. The project also includes Streamlit, FastAPI and a demonstration governance assistant.
+The GAP addresses a recurring analytics problem: inconsistent data can reach executive reports when quality, privacy and publication decisions are handled outside the pipeline. The implemented pipeline runs locally with Python, SQL, dbt and DuckDB. Versioned contracts, validation, reconciliation, lineage and privacy controls provide evidence for the Publication Gate. Explicit approval, review and blocking criteria help technical teams investigate inconsistencies and understand why data may proceed to consumption or must be withheld. The project also includes Streamlit, FastAPI and a demonstration governance assistant.
 
 The [official Streamlit app](https://governed-analytics-platform.streamlit.app/) presents Microsoft Azure and AWS reference architectures. Each page distinguishes the implemented local workflow (**AS-IS**) from the proposed cloud design (**TO-BE**). The project owner confirmed visual rendering. Automated verification of browser-delivered bytes, navigation and responsive layouts, and a live revocation exercise remain pending. All five [public post-merge checks](https://github.com/samuelmaia-analytics/governed-analytics-platform-public/pull/25) passed.
 
